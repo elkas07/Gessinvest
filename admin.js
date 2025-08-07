@@ -4,7 +4,7 @@ import { supabase } from './supabase.js';
 function afficherMessageErreur(message) {
     const errorMessage = document.getElementById('error-message');
     errorMessage.textContent = message;
-    errorMessage.style.display = 'block';
+    errorMessage.classList.add('visible'); // Utilisez une classe CSS pour gérer la visibilité
 }
 
 // Fonction principale pour gérer la connexion
@@ -15,7 +15,8 @@ async function handleLogin(e) {
     const errorMessage = document.getElementById('error-message');
     
     // Réinitialiser le message d'erreur
-    errorMessage.style.display = 'none';
+    errorMessage.textContent = '';
+    errorMessage.classList.remove('visible');
 
     // Vérifier que les champs ne sont pas vides
     if (!emailInput || !passwordInput) {
