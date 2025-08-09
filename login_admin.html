@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Connexion Administrateur - GESS INVEST</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         * {
             margin: 0;
@@ -245,9 +246,9 @@
         </div>
         
         <div class="login-form">
-            <div class="error-message">
+            <div class="error-message" id="errorMessage" style="display: none;">
                 <i class="fas fa-exclamation-circle"></i>
-                <span>Identifiants incorrects. Veuillez réessayer.</span>
+                <span id="errorText">Identifiants incorrects. Veuillez réessayer.</span>
             </div>
             
             <form id="adminLoginForm">
@@ -255,7 +256,7 @@
                     <label for="email">Email de l'administrateur</label>
                     <div class="input-with-icon">
                         <i class="fas fa-envelope"></i>
-                        <input type="email" id="email" class="form-control" placeholder="elkas07@live.fr" required value="elkas07@live.fr">
+                        <input type="email" id="email" class="form-control" placeholder="gess.srh.td@gmail.com" required>
                     </div>
                 </div>
                 
@@ -271,7 +272,7 @@
                 </div>
                 
                 <div class="forgot-password">
-                    <a href="#">Mot de passe oublié ?</a>
+                    <a href="#" id="forgotPassword">Mot de passe oublié ?</a>
                 </div>
                 
                 <button type="submit" class="btn-login">
@@ -296,6 +297,19 @@
     </div>
 
     <script>
+        // Configuration Supabase
+        const SUPABASE_URL = "https://mtjkijmzzycymjmdlvn.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10amtpam16eXpjeXltam1kbHZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMDgwNzQsImV4cCI6MjA2OTc4NDA3NH0.s35vs0dVC0XrKMwPLgP_WxVUBZKuJRAbF6S0-dspTt0";
+        
+        // Création du client Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        // Tableau des comptes administrateurs autorisés
+        const adminAccounts = [
+            { email: "gess.srh.td@gmail.com", password: "AdminGess2023!" },
+            { email: "elkas07@live.fr", password: "AdminGess2023!" }
+        ];
+
         document.addEventListener('DOMContentLoaded', function() {
             // Fonction pour basculer la visibilité du mot de passe
             const passwordToggle = document.getElementById('passwordToggle');
@@ -311,46 +325,112 @@
             
             // Gestion de la soumission du formulaire
             const loginForm = document.getElementById('adminLoginForm');
+            const errorMessage = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
             
-            loginForm.addEventListener('submit', function(e) {
+            loginForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 
-                const email = document.getElementById('email').value;
+                const email = document.getElementById('email').value.toLowerCase().trim();
                 const password = document.getElementById('password').value;
                 
-                // Ici, vous devriez envoyer les données à votre backend pour vérification
-                // Pour l'exemple, nous allons simuler une vérification
+                // Masquer les messages d'erreur précédents
+                errorMessage.style.display = 'none';
                 
-                // Mot de passe correct (à remplacer par votre logique d'authentification réelle)
-                const correctPassword = "AdminGess2023!"; 
-                
-                // Validation simple pour la démo
-                if (email === "elkas07@live.fr" && password === correctPassword) {
-                    // Redirection vers le tableau de bord admin
-                    alert("Connexion réussie! Redirection vers le tableau de bord...");
-                    // window.location.href = "admin-dashboard.html";
-                } else {
-                    // Afficher le message d'erreur avec animation
-                    const errorMessage = document.querySelector('.error-message');
+                try {
+                    // Vérifier si les identifiants correspondent à un compte admin
+                    const validAccount = adminAccounts.find(acc => 
+                        acc.email.toLowerCase() === email && acc.password === password
+                    );
+                    
+                    if (validAccount) {
+                        // Enregistrer la connexion dans la base de données
+                        const { data, error } = await supabase
+                            .from('admin_logs')
+                            .insert([
+                                { 
+                                    email: email,
+                                    action: 'login_success',
+                                    ip_address: await getIPAddress()
+                                }
+                            ]);
+                        
+                        // Stocker la session dans localStorage
+                        localStorage.setItem('admin_session', JSON.stringify({
+                            email: email,
+                            timestamp: new Date().getTime()
+                        }));
+                        
+                        // Redirection vers le tableau de bord admin
+                        window.location.href = "admin-dashboard.html";
+                    } else {
+                        // Enregistrer la tentative échouée
+                        await supabase
+                            .from('admin_logs')
+                            .insert([
+                                { 
+                                    email: email,
+                                    action: 'login_failed',
+                                    ip_address: await getIPAddress()
+                                }
+                            ]);
+                            
+                        // Afficher le message d'erreur
+                        errorText.textContent = "Identifiants incorrects. Veuillez réessayer.";
+                        errorMessage.style.display = 'flex';
+                        
+                        // Animation de secousse pour le formulaire
+                        loginForm.style.animation = 'shake 0.5s';
+                        setTimeout(() => {
+                            loginForm.style.animation = '';
+                        }, 500);
+                        
+                        // Effacer le mot de passe
+                        passwordInput.value = "";
+                        passwordInput.focus();
+                    }
+                } catch (err) {
+                    console.error("Erreur lors de la connexion:", err);
+                    errorText.textContent = "Erreur système. Veuillez réessayer plus tard.";
                     errorMessage.style.display = 'flex';
-                    
-                    // Animation de secousse pour le formulaire
-                    loginForm.style.animation = 'shake 0.5s';
-                    setTimeout(() => {
-                        loginForm.style.animation = '';
-                    }, 500);
-                    
-                    // Effacer le mot de passe
-                    passwordInput.value = "";
-                    passwordInput.focus();
                 }
             });
             
-            // Focus sur le champ mot de passe après chargement
+            // Gestion du mot de passe oublié
+            document.getElementById('forgotPassword').addEventListener('click', function(e) {
+                e.preventDefault();
+                const email = document.getElementById('email').value;
+                
+                if (email && validateEmail(email)) {
+                    alert(`Un lien de réinitialisation a été envoyé à ${email}`);
+                } else {
+                    errorText.textContent = "Veuillez entrer une adresse email valide.";
+                    errorMessage.style.display = 'flex';
+                }
+            });
+            
+            // Focus sur le champ email après chargement
             setTimeout(() => {
-                document.getElementById('password').focus();
+                document.getElementById('email').focus();
             }, 500);
         });
+        
+        // Fonction pour obtenir l'adresse IP
+        async function getIPAddress() {
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                return data.ip;
+            } catch (error) {
+                return "unknown";
+            }
+        }
+        
+        // Fonction de validation d'email
+        function validateEmail(email) {
+            const re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+            return re.test(String(email).toLowerCase());
+        }
     </script>
 </body>
 </html>
