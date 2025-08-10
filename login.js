@@ -62,7 +62,8 @@ forgotPasswordLink.addEventListener('click', async (e) => {
     if (email) {
         // Envoie un email de réinitialisation avec un lien qui redirige vers la page de login
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + '/login.html'
+            // C'est ici qu'il fallait mettre l'URL complète
+            redirectTo: 'https://gessinvest.vercel.app/login.html'
         });
         
         if (error) {
