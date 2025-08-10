@@ -1,0 +1,1 @@
+import { supabase } from './supabase.js'; const $=s=>document.querySelector(s); $('#btn-login').addEventListener('click', async ()=>{ const email=$('#email').value.trim(); const password=$('#password').value; const {error}=await supabase.auth.signInWithPassword({email,password}); if(!error) location.href='admin.html'; else alert(error.message); });

@@ -1,0 +1,1 @@
+import { supabase } from './supabase.js'; async function load(){ const {data:m}=await supabase.from('membres').select('id'); document.getElementById('kpi-total').textContent = (m||[]).length; } load();
