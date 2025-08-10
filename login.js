@@ -1,22 +1,23 @@
 import { supabase } from './supabase.js';
 
-const loginContainer = document.querySelector('.login-container');
+// Sélectionner les éléments du DOM
 const loginForm = document.getElementById('login-form');
 const resetForm = document.getElementById('reset-password-form');
 const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
 const newPasswordInput = document.getElementById('new-password');
 const errorMessage = document.getElementById('error-message');
+const errorMessageReset = document.getElementById('error-message-reset');
 const forgotPasswordLink = document.getElementById('forgot-password');
 
-// Fonction pour gérer la connexion
-async function handleLogin(e) {
+// Gérer la soumission du formulaire de connexion
+loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const email = emailInput.value;
     const password = passwordInput.value;
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
         email: email,
         password: password
     });
@@ -29,76 +30,65 @@ async function handleLogin(e) {
         errorMessage.classList.remove('visible');
         window.location.href = 'user_dashboard.html';
     }
-}
+});
 
-// Fonction pour gérer la réinitialisation du mot de passe
-async function handleResetPassword(e) {
+// Gérer la soumission du formulaire de réinitialisation
+resetForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const newPassword = newPasswordInput.value;
-
-    // Supabase détecte automatiquement le token dans l'URL pour cette fonction
-    const { data, error } = await supabase.auth.updateUser({
+    
+    // On met à jour le mot de passe de l'utilisateur
+    const { error } = await supabase.auth.updateUser({
         password: newPassword
     });
 
     if (error) {
         console.error('Erreur de mise à jour du mot de passe:', error.message);
-        errorMessage.textContent = 'Erreur lors du changement de mot de passe.';
-        errorMessage.classList.add('visible');
+        errorMessageReset.textContent = 'Erreur lors du changement de mot de passe.';
+        errorMessageReset.classList.add('visible');
     } else {
         alert('Votre mot de passe a été réinitialisé avec succès ! Vous pouvez maintenant vous connecter.');
-        // Rediriger vers la page de connexion après le changement
+        // On redirige vers la page de connexion après le changement
         window.location.href = 'login.html';
     }
-}
+});
 
-// Vérifier si l'URL contient un token de réinitialisation
-async function checkAuthSession() {
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (session && session.user.aud === 'authenticated') {
-        const urlParams = new URLSearchParams(window.location.search);
-        const type = urlParams.get('type');
-
-        if (type === 'recovery') {
-            // Afficher le formulaire de réinitialisation
-            if (loginForm) loginForm.style.display = 'none';
-            if (resetForm) resetForm.style.display = 'block';
-            return;
+// Gérer le lien "Mot de passe oublié ?"
+forgotPasswordLink.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = prompt("Entrez votre adresse email pour réinitialiser le mot de passe:");
+    
+    if (email) {
+        // Envoie un email de réinitialisation avec un lien qui redirige vers la page de login
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin + '/login.html'
+        });
+        
+        if (error) {
+            alert('Erreur lors de l\'envoi de l\'email de réinitialisation.');
+        } else {
+            alert('Un email de réinitialisation a été envoyé à votre adresse. Vérifiez votre boîte de réception.');
         }
     }
+});
 
-    // Par défaut, afficher le formulaire de connexion
-    if (loginForm) loginForm.style.display = 'block';
-    if (resetForm) resetForm.style.display = 'none';
+// Fonction pour vérifier l'URL et afficher le bon formulaire
+async function checkUrlForPasswordRecovery() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const type = urlParams.get('type');
+    
+    if (type === 'recovery') {
+        // Si le paramètre 'type=recovery' est présent, on masque le formulaire de connexion
+        // et on affiche celui pour changer le mot de passe.
+        if (loginForm) loginForm.style.display = 'none';
+        if (resetForm) resetForm.style.display = 'block';
+    } else {
+        // Sinon, on affiche le formulaire de connexion par défaut.
+        if (loginForm) loginForm.style.display = 'block';
+        if (resetForm) resetForm.style.display = 'none';
+    }
 }
 
-// Exécuter la vérification au chargement de la page
-document.addEventListener('DOMContentLoaded', checkAuthSession);
-
-// Ajouter les écouteurs d'événements
-if (loginForm) {
-    loginForm.addEventListener('submit', handleLogin);
-}
-
-if (resetForm) {
-    resetForm.addEventListener('submit', handleResetPassword);
-}
-
-if (forgotPasswordLink) {
-    forgotPasswordLink.addEventListener('click', async (e) => {
-        e.preventDefault();
-        const email = prompt("Entrez votre adresse email pour réinitialiser le mot de passe:");
-        if (email) {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: window.location.origin + '/login.html'
-            });
-            if (error) {
-                alert('Erreur lors de l\'envoi de l\'email de réinitialisation.');
-            } else {
-                alert('Un email de réinitialisation a été envoyé à votre adresse. Vérifiez votre boîte de réception.');
-            }
-        }
-    });
-}
+// Appeler la fonction au chargement de la page pour vérifier l'URL
+document.addEventListener('DOMContentLoaded', checkUrlForPasswordRecovery);
