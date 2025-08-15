@@ -2,130 +2,238 @@
 import { supabase } from './supabase.js';
 
 /* ================== UTILITAIRES ================== */
-function fmtXAF(v){
-  const n = Number(v||0);
-  return n.toLocaleString('fr-FR') + ' XAF';
-}
-function pct(collecte, objectif){
-  const c = Number(collecte||0), o = Number(objectif||0);
-  if (!o) return 0;
-  return Math.max(0, Math.min(100, Math.round((c/o)*100)));
-}
 
-/* ================== PROJETS ================== */
-const elEncours = document.getElementById('cards-encours');
-const elAtteint = document.getElementById('cards-atteint');
-const elAvenir  = document.getElementById('cards-avenir');
-
-function badge(statut){
-  if(statut==='encours') return '<span class="badge encours">Collecte en cours</span>';
-  if(statut==='atteint') return '<span class="badge atteint">Objectif atteint</span>';
-  return '<span class="badge avenir">Collecte à venir</span>';
+/**
+ * Formate un nombre en devise XAF.
+ * @param {number} value - Le montant à formater.
+ * @returns {string} Le montant formaté avec "XAF".
+ */
+function formatXAF(value) {
+  const amount = Number(value || 0);
+  return amount.toLocaleString('fr-FR') + ' XAF';
 }
 
-function cardProject(p){
-  const pcent = pct(p.collecte, p.objectif);
-  const dateEvt = p.evenement_date ? new Date(p.evenement_date) : null;
-  const dateTxt = dateEvt ? `${dateEvt.toLocaleDateString()} à ${dateEvt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}` : '';
+/**
+ * Calcule le pourcentage de progression d'un objectif.
+ * @param {number} collected - Le montant collecté.
+ * @param {number} goal - L'objectif à atteindre.
+ * @returns {number} Le pourcentage arrondi entre 0 et 100.
+ */
+function calculatePercentage(collected, goal) {
+  const c = Number(collected || 0);
+  const o = Number(goal || 0);
+  if (o <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((c / o) * 100)));
+}
+
+/* ================== RENDU PROJETS ================== */
+
+const projectContainers = {
+  encours: document.getElementById('cards-encours'),
+  atteint: document.getElementById('cards-atteint'),
+  avenir: document.getElementById('cards-avenir')
+};
+
+/**
+ * Crée le HTML pour le badge de statut.
+ * @param {string} status - Le statut du projet ('encours', 'atteint', 'avenir').
+ * @returns {string} Le code HTML du badge.
+ */
+function createStatusBadge(status) {
+  const badges = {
+    'encours': 'Collecte en cours',
+    'atteint': 'Objectif atteint',
+    'avenir': 'Collecte à venir'
+  };
+  const text = badges[status] || '';
+  return `<span class="badge ${status}">${text}</span>`;
+}
+
+/**
+ * Crée une carte de projet à partir des données.
+ * @param {object} project - L'objet projet.
+ * @returns {string} Le code HTML de la carte.
+ */
+function createProjectCard(project) {
+  const percentage = calculatePercentage(project.collecte, project.objectif);
+  const eventDate = project.evenement_date ? new Date(project.evenement_date) : null;
+  const dateText = eventDate ? `${eventDate.toLocaleDateString()} à ${eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '';
 
   return `
     <article class="card">
-      <img src="${p.image_url || 'https://images.unsplash.com/photo-1505691723518-36a5ac3b2d55?q=80&w=1200&auto=format&fit=crop'}" alt="${p.titre||''}">
+      <img src="${project.image_url || 'https://images.unsplash.com/photo-1505691723518-36a5ac3b2d55?q=80&w=1200&auto=format&fit=crop'}" alt="${project.titre || ''}">
       <div class="card-body">
-        ${badge(p.statut)}
-        <h3>${p.titre || 'Projet immobilier'}</h3>
-        <div class="meta"><span>Objectif :</span><strong>${fmtXAF(p.objectif)}</strong></div>
-        <div class="meta"><span>Collecté :</span><strong>${fmtXAF(p.collecte)}</strong></div>
-        <div class="progress"><span style="width:${pcent}%"></span></div>
-        ${p.statut==='avenir' && dateTxt ? `<div class="meta" style="margin-top:6px;">🕒 ${dateTxt}</div>`:''}
-        ${p.ville ? `<div class="meta">📍 ${p.ville}</div>`:''}
+        ${createStatusBadge(project.statut)}
+        <h3 class="card-title">${project.titre || 'Projet immobilier'}</h3>
+        <div class="card-meta"><span>Objectif :</span><strong>${formatXAF(project.objectif)}</strong></div>
+        <div class="card-meta"><span>Collecté :</span><strong>${formatXAF(project.collecte)}</strong></div>
+        <div class="progress"><span style="width:${percentage}%"></span></div>
+        ${project.statut === 'avenir' && dateText ? `<div class="card-meta">🕒 ${dateText}</div>` : ''}
+        ${project.ville ? `<div class="card-meta">📍 ${project.ville}</div>` : ''}
       </div>
     </article>
   `;
 }
 
-async function chargerProjets(){
-  const { data, error } = await supabase
+/**
+ * Charge les projets depuis la base de données et les affiche.
+ */
+async function loadProjects() {
+  // Optionnel : afficher un état de chargement
+  Object.values(projectContainers).forEach(container => {
+    if (container) container.innerHTML = '<p class="loading-message">Chargement des projets...</p>';
+  });
+
+  const { data: projects, error } = await supabase
     .from('projets')
     .select('*')
     .order('statut', { ascending: true })
     .order('debut_collecte', { ascending: false });
 
-  if(error){ console.error(error); return; }
-
-  elEncours.innerHTML = '';
-  elAtteint.innerHTML = '';
-  elAvenir.innerHTML  = '';
-
-  (data||[]).forEach(p=>{
-    const html = cardProject(p);
-    if(p.statut==='atteint') elAtteint.insertAdjacentHTML('beforeend', html);
-    else if(p.statut==='avenir') elAvenir.insertAdjacentHTML('beforeend', html);
-    else elEncours.insertAdjacentHTML('beforeend', html);
-  });
-}
-
-// temps réel sur projets
-supabase
-  .channel('projets-realtime')
-  .on('postgres_changes', { event:'*', schema:'public', table:'projets' }, () => chargerProjets())
-  .subscribe();
-
-/* ================== COTISATIONS ================== */
-const form = document.getElementById('cotisation-form');
-const tbody = document.getElementById('cotisation-body');
-
-async function chargerCotisations(){
-  const { data, error } = await supabase
-    .from('cotisations')
-    .select('*')
-    .order('date_de_cotisation', { ascending:false });
-
-  if(error){ console.error(error); return; }
-
-  tbody.innerHTML = '';
-  (data||[]).forEach(c=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${c.nom}</td>
-      <td>${c.telephone}</td>
-      <td>${fmtXAF(c.montant)}</td>
-      <td>${new Date(c.date_de_cotisation).toLocaleDateString()}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-form?.addEventListener('submit', async (e)=>{
-  e.preventDefault();
-  const nom = document.getElementById('nom').value.trim();
-  const telephone = document.getElementById('telephone').value.trim();
-  const montant = parseFloat(document.getElementById('montant').value);
-
-  if(!nom || !telephone || isNaN(montant)){
-    alert('Merci de compléter tous les champs.');
+  if (error) {
+    console.error('Erreur de chargement des projets :', error);
+    Object.values(projectContainers).forEach(container => {
+      if (container) container.innerHTML = '<p class="error-message">Une erreur est survenue lors du chargement des projets.</p>';
+    });
     return;
   }
 
-  const { error } = await supabase
-    .from('cotisations')
-    .insert([{ nom, telephone, montant }]);
+  // Vider les conteneurs et afficher les projets
+  Object.values(projectContainers).forEach(container => { if (container) container.innerHTML = ''; });
+  
+  projects.forEach(project => {
+    const html = createProjectCard(project);
+    const container = projectContainers[project.statut];
+    if (container) {
+      container.insertAdjacentHTML('beforeend', html);
+    } else {
+      console.warn(`Statut de projet inconnu: ${project.statut}`);
+    }
+  });
+}
 
-  if(error){
-    alert('Erreur lors de l’enregistrement : ' + error.message);
-    console.error(error);
-  }else{
-    form.reset();
-    chargerCotisations();
-  }
-});
-
-// temps réel sur cotisations
+// Abonnement en temps réel aux projets
 supabase
-  .channel('cotisations-realtime')
-  .on('postgres_changes', { event:'*', schema:'public', table:'cotisations' }, () => chargerCotisations())
+  .channel('projets-realtime')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'projets' }, () => {
+    console.log("Mise à jour en temps réel des projets...");
+    loadProjects();
+  })
   .subscribe();
 
-/* ================== DÉMARRAGE ================== */
-chargerProjets();
-chargerCotisations();
+/* ================== RENDU COTISATIONS ================== */
+
+const contributionForm = document.getElementById('cotisation-form');
+const contributionBody = document.getElementById('cotisation-body');
+const contributionFormInputs = {
+    nom: document.getElementById('nom'),
+    telephone: document.getElementById('telephone'),
+    montant: document.getElementById('montant')
+};
+
+/**
+ * Charge les cotisations et les affiche dans le tableau.
+ */
+async function loadContributions() {
+    if (!contributionBody) {
+        console.warn("L'élément 'cotisation-body' n'a pas été trouvé.");
+        return;
+    }
+
+    contributionBody.innerHTML = '<tr><td colspan="4" class="loading-message">Chargement des cotisations...</td></tr>';
+
+    const { data: contributions, error } = await supabase
+      .from('cotisations')
+      .select('*')
+      .order('date_de_cotisation', { ascending: false });
+
+    if (error) {
+        console.error('Erreur de chargement des cotisations :', error);
+        contributionBody.innerHTML = '<tr><td colspan="4" class="error-message">Erreur lors du chargement des cotisations.</td></tr>';
+        return;
+    }
+
+    if (contributions.length === 0) {
+        contributionBody.innerHTML = '<tr><td colspan="4" class="empty-message">Aucune cotisation enregistrée pour le moment.</td></tr>';
+        return;
+    }
+
+    // Effacer le contenu existant et ajouter les nouvelles lignes
+    contributionBody.innerHTML = '';
+    contributions.forEach(c => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${c.nom || '-'}</td>
+            <td>${c.telephone || '-'}</td>
+            <td>${formatXAF(c.montant)}</td>
+            <td>${new Date(c.date_de_cotisation).toLocaleDateString()}</td>
+        `;
+        contributionBody.appendChild(row);
+    });
+}
+
+/**
+ * Gère la soumission du formulaire de cotisation.
+ */
+async function handleFormSubmission(e) {
+  e.preventDefault();
+
+  const { nom, telephone, montant } = contributionFormInputs;
+  const nomValue = nom.value.trim();
+  const telephoneValue = telephone.value.trim();
+  const montantValue = parseFloat(montant.value);
+
+  if (!nomValue || !telephoneValue || isNaN(montantValue) || montantValue <= 0) {
+    alert('Veuillez compléter tous les champs correctement (le montant doit être un nombre positif).');
+    return;
+  }
+
+  // Désactiver le bouton et indiquer l'état de chargement
+  const submitButton = contributionForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  submitButton.textContent = 'Enregistrement...';
+
+  try {
+    const { error } = await supabase
+      .from('cotisations')
+      .insert([{ nom: nomValue, telephone: telephoneValue, montant: montantValue }]);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    // Succès
+    alert('Cotisation enregistrée avec succès !');
+    contributionForm.reset();
+    loadContributions(); // Recharger les données pour refléter le changement
+  } catch (err) {
+    console.error('Erreur lors de l’enregistrement :', err);
+    alert('Erreur lors de l’enregistrement : ' + err.message);
+  } finally {
+    // Réactiver le bouton après la requête
+    submitButton.disabled = false;
+    submitButton.textContent = 'Enregistrer';
+  }
+}
+
+// Écouteur d'événement sur la soumission du formulaire
+if (contributionForm) {
+  contributionForm.addEventListener('submit', handleFormSubmission);
+} else {
+  console.warn("Le formulaire avec l'ID 'cotisation-form' n'a pas été trouvé.");
+}
+
+// Abonnement en temps réel aux cotisations
+supabase
+  .channel('cotisations-realtime')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'cotisations' }, () => {
+    console.log("Mise à jour en temps réel des cotisations...");
+    loadContributions();
+  })
+  .subscribe();
+
+/* ================== DÉMARRAGE DE LA PAGE ================== */
+document.addEventListener('DOMContentLoaded', () => {
+  loadProjects();
+  loadContributions();
+});
