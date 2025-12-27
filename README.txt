@@ -1,0 +1,1 @@
+GESSINVEST – Pack minimal complet. Remplace les fichiers dans ton repo GitHub, push, Vercel redéploie.
