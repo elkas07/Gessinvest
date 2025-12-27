@@ -3267,6 +3267,22 @@
         // Taux de conversion
         const EUR_TO_CFA = 655;
 
+        // Déclaration des fonctions globales utilisées dans le HTML
+        window.openLoginModal = openLoginModal;
+        window.openRegistrationModal = openRegistrationModal;
+        window.openSimulatorModal = openSimulatorModal;
+        window.showSection = showSection;
+        window.closeMobileMenu = closeMobileMenu;
+        window.logout = logout;
+        window.openAddFundsModal = openAddFundsModal;
+        window.openKYCPortal = openKYCPortal;
+        window.openAdminKYCPortal = openAdminKYCPortal;
+        window.openAddProjectModal = openAddProjectModal;
+        window.openCommissionSettingsModal = openCommissionSettingsModal;
+        window.exportAdminData = exportAdminData;
+        window.refreshAdminDashboard = refreshAdminDashboard;
+        window.refreshMemberDashboard = refreshMemberDashboard;
+
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🚀 Initialisation de l\'application GESSINVEST');
@@ -3309,6 +3325,9 @@
                 
                 // AJOUT : Créer l'instance Supabase si elle n'existe pas
                 if (!window.supabase) {
+                    // REMPLACEZ CES VALEURS PAR VOS VRAIES CLÉS SUPABASE
+                    const SUPABASE_URL = 'https://votre-url.supabase.co';
+                    const SUPABASE_ANON_KEY = 'votre-cle-anon';
                     window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 }
                 
@@ -6085,8 +6104,7 @@
                             },
                             status: 'pending',
                             submitted_at: new Date().toISOString(),
-                            notes: `Document ${selectedDocument
-                            Type} soumis par l'utilisateur`
+                            notes: `Document ${selectedDocumentType} soumis par l'utilisateur`
                         });
 
                     if (kycError) throw kycError;
@@ -6105,352 +6123,131 @@
             }
         }
 
-        // Mettre à jour le tableau de bord membre
-        async function updateMemberDashboard() {
-            if (!currentUser) return;
-
-            try {
-                // Récupérer les données du membre
-                const { data: memberData, error: memberError } = await supabase
-                    .from('members')
-                    .select('*')
-                    .eq('email', currentUser.email)
-                    .single();
-
-                if (memberError) throw memberError;
-
-                // Mettre à jour les informations personnelles
-                document.getElementById('memberWelcomeMessage').textContent = `Bonjour ${memberData.name || currentUser.email}, bienvenue dans votre espace investisseur`;
-                document.getElementById('memberBalance').textContent = formatCFA(memberData.balance || 0);
-                document.getElementById('availableBalance').textContent = formatCFA(memberData.balance || 0);
-
-                // Récupérer les investissements du membre
-                const { data: memberInvestments, error: investmentsError } = await supabase
-                    .from('contributions')
-                    .select(`
-                        *,
-                        projects:project_id(name, return_rate)
-                    `)
-                    .eq('member_id', memberData.id)
-                    .order('created_at', { ascending: false });
-
-                if (!investmentsError && memberInvestments) {
-                    // Calculer les statistiques
-                    const totalInvested = memberInvestments.reduce((sum, inv) => sum + inv.amount, 0);
-                    const expectedReturn = memberInvestments.reduce((sum, inv) => {
-                        const projectReturn = inv.projects?.return_rate || 12;
-                        return sum + (inv.amount * (projectReturn / 100));
-                    }, 0);
-                    const activeProjects = memberInvestments.filter(inv => inv.status === 'completed').length;
-
-                    document.getElementById('totalInvested').textContent = formatCFA(totalInvested);
-                    document.getElementById('expectedReturn').textContent = formatCFA(expectedReturn);
-                    document.getElementById('activeProjects').textContent = activeProjects;
-
-                    // Mettre à jour la table des investissements
-                    const investmentsTable = document.getElementById('memberInvestments');
-                    investmentsTable.innerHTML = '';
-
-                    memberInvestments.forEach(investment => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${investment.projects?.name || 'Projet'}</td>
-                            <td>${formatCFA(investment.amount)}</td>
-                            <td>${new Date(investment.created_at).toLocaleDateString()}</td>
-                            <td>${investment.payment_method === 'cash' ? 'Espèces' : 
-                                  investment.payment_method === 'transfer' ? 'Virement' :
-                                  investment.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}</td>
-                            <td>
-                                <span class="status-badge ${investment.status === 'completed' ? 'status-completed' : 
-                                                           investment.status === 'pending_verification' ? 'status-cash' : 'status-pending'}">
-                                    ${investment.status === 'completed' ? 'Validé' : 
-                                     investment.status === 'pending_verification' ? 'En attente (Espèces)' : 'En attente'}
-                                </span>
-                            </td>
-                            <td>${investment.projects?.return_rate || 12}%</td>
-                        `;
-                        investmentsTable.appendChild(row);
-                    });
-                }
-
-                // Mettre à jour les transactions en attente
-                const pendingTable = document.getElementById('memberPendingTransactions');
-                pendingTable.innerHTML = '';
-
-                const memberPending = pendingTransactions.filter(t => t.member_id === memberData.id);
-                
-                if (memberPending.length > 0) {
-                    memberPending.forEach(transaction => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
-                            <td>${formatCFA(transaction.amount)}</td>
-                            <td>${transaction.payment_method === 'cash' ? 'Espèces' : 
-                                  transaction.payment_method === 'transfer' ? 'Virement' :
-                                  transaction.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}</td>
-                            <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
-                            <td>
-                                <span class="status-badge status-pending">En attente</span>
-                            </td>
-                        `;
-                        pendingTable.appendChild(row);
-                    });
-                } else {
-                    pendingTable.innerHTML = '<tr><td colspan="5" style="text-align: center;">Aucune transaction en attente</td></tr>';
-                }
-
-                // Afficher la section KYC si nécessaire
-                const kycSection = document.getElementById('kycStatusSection');
-                if (currentKYCStatus !== 'verified') {
-                    kycSection.style.display = 'block';
-                    updateKYCStatusDisplay();
-                } else {
-                    kycSection.style.display = 'none';
-                }
-
-            } catch (error) {
-                console.error('❌ Erreur mise à jour dashboard membre:', error);
-                showNotification('Erreur lors du chargement de votre tableau de bord', 'error');
+        // Fonction pour configurer les écouteurs d'événements
+        function setupEventListeners() {
+            // Formulaire de connexion
+            const loginForm = document.getElementById('loginForm');
+            if (loginForm) {
+                loginForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const email = document.getElementById('login-email').value;
+                    const password = document.getElementById('login-password').value;
+                    login(email, password);
+                });
             }
+            
+            // Formulaire d'inscription
+            const registrationForm = document.getElementById('registrationForm');
+            if (registrationForm) {
+                registrationForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const name = document.getElementById('reg-name').value;
+                    const email = document.getElementById('reg-email').value;
+                    const phone = document.getElementById('reg-phone').value;
+                    const password = document.getElementById('reg-password').value;
+                    const confirmPassword = document.getElementById('reg-confirm-password').value;
+                    
+                    if (password !== confirmPassword) {
+                        showNotification('Les mots de passe ne correspondent pas', 'error');
+                        return;
+                    }
+                    
+                    register(name, email, password, phone);
+                });
+            }
+            
+            // Formulaire d'ajout de fonds
+            const addFundsForm = document.getElementById('addFundsForm');
+            if (addFundsForm) {
+                addFundsForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    processAddFunds();
+                });
+            }
+            
+            // Formulaire mot de passe oublié
+            const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+            if (forgotPasswordForm) {
+                forgotPasswordForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    processForgotPassword();
+                });
+            }
+            
+            // Simulateur
+            setupSimulator();
+            
+            // Image upload
+            setupImageUpload();
+            
+            // KYC upload
+            initKYCDocumentUpload();
         }
 
-        // Fonctions utilitaires supplémentaires
-        function showNotification(message, type = 'success') {
-            const notification = document.getElementById('notification');
-            const messageEl = document.getElementById('notification-message');
-            const icon = notification.querySelector('i');
-
-            notification.className = 'notification';
-            notification.classList.add(type);
-            messageEl.textContent = message;
-
-            // Changer l'icône selon le type
-            if (type === 'error') {
-                icon.className = 'fas fa-exclamation-circle';
-            } else if (type === 'warning') {
-                icon.className = 'fas fa-exclamation-triangle';
-            } else {
-                icon.className = 'fas fa-check-circle';
-            }
-
-            notification.style.display = 'flex';
-
-            // Masquer automatiquement après 5 secondes
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 5000);
-        }
-
+        // Fonction pour configurer le menu mobile
         function setupMobileMenu() {
             const mobileMenuBtn = document.getElementById('mobileMenuBtn');
             const navLinks = document.getElementById('navLinks');
             const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
-
-            if (mobileMenuBtn && navLinks) {
+            
+            if (mobileMenuBtn && navLinks && mobileMenuOverlay) {
                 mobileMenuBtn.addEventListener('click', function() {
+                    this.classList.toggle('active');
                     navLinks.classList.toggle('active');
                     mobileMenuOverlay.classList.toggle('active');
-                    mobileMenuBtn.classList.toggle('active');
-                    mobileMenuBtn.setAttribute('aria-expanded', navLinks.classList.contains('active'));
                 });
-
-                mobileMenuOverlay.addEventListener('click', closeMobileMenu);
+                
+                mobileMenuOverlay.addEventListener('click', function() {
+                    mobileMenuBtn.classList.remove('active');
+                    navLinks.classList.remove('active');
+                    this.classList.remove('active');
+                });
             }
         }
 
+        // Fonction pour fermer le menu mobile
         function closeMobileMenu() {
             const mobileMenuBtn = document.getElementById('mobileMenuBtn');
             const navLinks = document.getElementById('navLinks');
             const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
-
-            if (navLinks) {
+            
+            if (mobileMenuBtn && navLinks && mobileMenuOverlay) {
+                mobileMenuBtn.classList.remove('active');
                 navLinks.classList.remove('active');
                 mobileMenuOverlay.classList.remove('active');
-                mobileMenuBtn.classList.remove('active');
-                mobileMenuBtn.setAttribute('aria-expanded', 'false');
             }
         }
 
-        function setupEventListeners() {
-            // Formulaire de connexion
-            document.getElementById('loginForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const email = document.getElementById('login-email').value;
-                const password = document.getElementById('login-password').value;
-                login(email, password);
-            });
-
-            // Formulaire d'inscription
-            document.getElementById('registrationForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const name = document.getElementById('reg-name').value;
-                const email = document.getElementById('reg-email').value;
-                const phone = document.getElementById('reg-phone').value;
-                const password = document.getElementById('reg-password').value;
-                const confirmPassword = document.getElementById('reg-confirm-password').value;
-
-                if (password !== confirmPassword) {
-                    showNotification('Les mots de passe ne correspondent pas', 'error');
-                    return;
-                }
-
-                register(name, email, password, phone);
-            });
-
-            // Formulaire de mot de passe oublié
-            document.getElementById('forgotPasswordForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                processForgotPassword();
-            });
-
-            // Formulaire d'ajout de fonds
-            document.getElementById('addFundsForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                processAddFunds();
-            });
-
-            // Simulateur
-            setupSimulator();
-
-            // Configuration upload d'image
-            setupImageUpload();
-
-            // Configuration upload KYC
-            initKYCDocumentUpload();
-
-            // Écouteurs pour les montants
-            document.getElementById('fundsAmount')?.addEventListener('input', updateFundsAmountDisplay);
-            document.getElementById('investmentAmount')?.addEventListener('input', updateAmountDisplay);
-
-            // Recherche utilisateurs
-            document.getElementById('userSearch')?.addEventListener('input', function(e) {
-                userSearchTerm = e.target.value;
-                changeUserPage(1);
-            });
-
-            // Filtres utilisateurs
-            document.getElementById('userRoleFilter')?.addEventListener('change', function(e) {
-                userRoleFilter = e.target.value;
-                changeUserPage(1);
-            });
-
-            document.getElementById('userStatusFilter')?.addEventListener('change', function(e) {
-                userStatusFilter = e.target.value;
-                changeUserPage(1);
-            });
-
-            document.getElementById('userKYCStatusFilter')?.addEventListener('change', function(e) {
-                userKYCStatusFilter = e.target.value;
-                changeUserPage(1);
-            });
-
-            document.getElementById('userPageSize')?.addEventListener('change', function(e) {
-                userPageSize = parseInt(e.target.value);
-                changeUserPage(1);
-            });
-
-            // Période d'export personnalisée
-            document.getElementById('exportPeriod')?.addEventListener('change', function(e) {
-                const customContainer = document.getElementById('customPeriodContainer');
-                if (e.target.value === 'custom') {
-                    customContainer.style.display = 'block';
-                } else {
-                    customContainer.style.display = 'none';
-                }
-            });
-
-            // Fermer les modals avec ESC
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    const modals = document.querySelectorAll('.modal');
-                    modals.forEach(modal => {
-                        if (modal.style.display === 'flex') {
-                            const modalId = modal.id;
-                            closeModal(modalId);
-                        }
-                    });
-                }
-            });
-        }
-
-        // Fonctions manquantes (simplifiées pour le prototype)
-        function deleteProject(projectId) {
-            if (confirm('Êtes-vous sûr de vouloir supprimer ce projet ?')) {
-                showNotification('Projet supprimé (fonctionnalité en développement)', 'warning');
+        // Fonction pour afficher les notifications
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            const notificationMessage = document.getElementById('notification-message');
+            
+            if (notification && notificationMessage) {
+                notificationMessage.textContent = message;
+                notification.className = `notification ${type}`;
+                notification.style.display = 'flex';
+                
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                }, 5000);
             }
         }
 
-        function deleteCommission(commissionId) {
-            if (confirm('Êtes-vous sûr de vouloir supprimer cette commission ?')) {
-                showNotification('Commission supprimée (fonctionnalité en développement)', 'warning');
-            }
-        }
-
-        function deleteUser(userId) {
-            if (confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
-                showNotification('Utilisateur supprimé (fonctionnalité en développement)', 'warning');
-            }
-        }
-
-        function suspendUser(userId) {
-            if (confirm('Êtes-vous sûr de vouloir suspendre cet utilisateur ?')) {
-                showNotification('Utilisateur suspendu (fonctionnalité en développement)', 'warning');
-            }
-        }
-
-        function editUser(userId) {
-            showNotification('Édition utilisateur (fonctionnalité en développement)', 'warning');
-        }
-
+        // Fonction pour exporter les données admin (placeholder)
         function exportAdminData() {
-            openModal('exportDataModal');
+            showNotification('Fonction d\'export en cours de développement', 'warning');
         }
 
-        function generateExport() {
-            showNotification('Export des données en cours de génération...', 'warning');
-            // Dans une vraie implémentation, cela générerait un fichier CSV/Excel
+        // Fonction pour mettre à jour le dashboard membre (placeholder)
+        async function updateMemberDashboard() {
+            showNotification('Mise à jour du tableau de bord...');
+            // Implémentation à venir
         }
 
-        function loadAdminKYCList() {
-            // Cette fonction chargerait la liste KYC dans le modal admin
-            showNotification('Chargement des vérifications KYC...', 'warning');
-        }
+        // Ajoutez les autres fonctions manquantes ici selon vos besoins
+        // ...
 
-        function viewKYCVerification(kycId) {
-            // Cette fonction afficherait les détails d'une vérification KYC
-            showNotification('Affichage des détails KYC (fonctionnalité en développement)', 'warning');
-        }
-
-        function approveKYC() {
-            if (confirm('Approuver cette vérification KYC ?')) {
-                showNotification('KYC approuvé (fonctionnalité en développement)', 'success');
-            }
-        }
-
-        function rejectKYC() {
-            if (confirm('Rejeter cette vérification KYC ?')) {
-                showNotification('KYC rejeté (fonctionnalité en développement)', 'warning');
-            }
-        }
-
-        function requestMoreInfoKYC() {
-            showNotification('Demande d\'informations supplémentaires (fonctionnalité en développement)', 'warning');
-        }
-
-        function validatePayment(contributionId) {
-            if (confirm('Valider ce paiement ?')) {
-                showNotification('Paiement validé (fonctionnalité en développement)', 'success');
-            }
-        }
-
-        function deleteContribution(contributionId) {
-            if (confirm('Supprimer cette contribution ?')) {
-                showNotification('Contribution supprimée (fonctionnalité en développement)', 'warning');
-            }
-        }
-
-        // Initialiser l'application
-        initializeApp();
     </script>
 </body>
 </html>
