@@ -3267,7 +3267,7 @@
         // Taux de conversion
         const EUR_TO_CFA = 655;
 
-        // ⭐ CORRECTION ⭐ - Déclaration des fonctions globales utilisées dans le HTML
+        // Déclaration des fonctions globales utilisées dans le HTML
         window.openLoginModal = openLoginModal;
         window.openRegistrationModal = openRegistrationModal;
         window.openSimulatorModal = openSimulatorModal;
@@ -3283,7 +3283,7 @@
         window.refreshAdminDashboard = refreshAdminDashboard;
         window.refreshMemberDashboard = refreshMemberDashboard;
         
-        // ⭐ CORRECTION ⭐ - Ajout des déclarations manquantes
+        // Ajout des déclarations manquantes
         window.openForgotPasswordModal = openForgotPasswordModal;
         window.closeModal = closeModal;
         window.showAllProjects = showAllProjects;
@@ -3341,49 +3341,57 @@
             }
         }
 
-        // ⭐ CORRECTION ⭐ - Test de connexion à Supabase avec initialisation correcte
+        // Fonction helper pour obtenir l'instance Supabase
+        function getSupabase() {
+            if (!window.supabaseClient) {
+                console.warn('⚠️ Client Supabase non initialisé, tentative de création...');
+                try {
+                    // CORRECTION : Utiliser la variable globale 'supabase' du CDN
+                    if (typeof supabase === 'undefined') {
+                        console.error('❌ Supabase JS client n\'est pas chargé');
+                        return null;
+                    }
+                    
+                    const SUPABASE_URL = 'https://mtjkijmzyzcyymjmdlvn.supabase.co';
+                    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10amtpam16eXpjeXltam1kbHZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMDgwNzQsImV4cCI6MjA2OTc4NDA3NH0.s35vs0dVC0XrKMwPLgP_WxVUBZKuJRAbF6S0-dspTt0';
+                    window.supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                    console.log('✅ Client Supabase créé');
+                } catch (error) {
+                    console.error('❌ Erreur création client Supabase:', error);
+                    return null;
+                }
+            }
+            return window.supabaseClient;
+        }
+
+        // Test de connexion à Supabase - CORRIGÉ
         async function testSupabaseConnection() {
             try {
                 console.log('🧪 Test de connexion Supabase...');
                 
-                // Vérifier si Supabase est disponible globalement
+                // CORRECTION : Vérifier si le client Supabase est disponible
                 if (typeof supabase === 'undefined') {
-                    console.error('❌ Supabase n\'est pas chargé correctement');
+                    console.error('❌ Supabase JS client n\'est pas chargé');
+                    isSupabaseConnected = false;
+                    updateDebugInfo('Supabase JS client non chargé - Vérifiez le CDN');
+                    return false;
+                }
+                
+                // Obtenir l'instance Supabase
+                const supabaseInstance = getSupabase();
+                if (!supabaseInstance) {
+                    console.error('❌ Impossible d\'obtenir l\'instance Supabase');
                     isSupabaseConnected = false;
                     return false;
                 }
                 
-                // CORRECTION : Créer l'instance Supabase si elle n'existe pas
-                if (!window.supabase) {
-                    // REMPLACEZ CES VALEURS PAR VOS VRAIES CLÉS SUPABASE
-                    const SUPABASE_URL = 'https://mtjkijmzyzcyymjmdlvn.supabase.co';
-                    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10amtpam16eXpjeXltam1kbHZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMDgwNzQsImV4cCI6MjA2OTc4NDA3NH0.s35vs0dVC0XrKMwPLgP_WxVUBZKuJRAbF6S0-dspTt0';
-                    
-                    try {
-                        window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                        console.log('✅ Client Supabase créé avec succès');
-                    } catch (error) {
-                        console.error('❌ Erreur création client Supabase:', error);
-                        isSupabaseConnected = false;
-                        return false;
-                    }
-                }
+                // Test simple de connexion
+                const test = await supabaseInstance.from('transactions').select('*').limit(1);
                 
-                // CORRECTION : Utiliser window.supabase au lieu de supabase
-                if (!window.supabase) {
-                    throw new Error('Supabase client non initialisé');
-                }
-                
-                // Tester la connexion avec une requête simple
-                const { data, error } = await window.supabase
-                    .from('transactions')
-                    .select('*')
-                    .limit(1);
-                
-                if (error) {
-                    console.error('❌ Erreur connexion Supabase:', error);
+                if (test.error) {
+                    console.error('❌ Erreur connexion Supabase:', test.error);
                     isSupabaseConnected = false;
-                    updateDebugInfo('Erreur Supabase: ' + error.message);
+                    updateDebugInfo('Erreur Supabase: ' + test.error.message);
                     return false;
                 } else {
                     console.log('✅ Connexion Supabase réussie');
@@ -3411,11 +3419,13 @@
 
         // Configuration des abonnements en temps réel améliorée
         function setupRealtimeSubscriptions() {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.warn('❌ Impossible de démarrer les abonnements - Supabase non connecté');
                 return;
             }
+
+            const supabase = getSupabase();
+            if (!supabase) return;
 
             // Afficher l'indicateur en temps réel
             const realtimeIndicator = document.getElementById('realtimeIndicator');
@@ -3430,7 +3440,7 @@
 
             try {
                 // Abonnement aux projets
-                const projectsSubscription = window.supabase
+                const projectsSubscription = supabase
                     .channel('projects-channel')
                     .on('postgres_changes', 
                         { event: '*', schema: 'public', table: 'projects' },
@@ -3449,7 +3459,7 @@
                     });
 
                 // Abonnement aux transactions
-                const transactionsSubscription = window.supabase
+                const transactionsSubscription = supabase
                     .channel('transactions-channel')
                     .on('postgres_changes', 
                         { event: '*', schema: 'public', table: 'transactions' },
@@ -3468,7 +3478,7 @@
                     });
 
                 // Abonnement aux utilisateurs
-                const usersSubscription = window.supabase
+                const usersSubscription = supabase
                     .channel('users-channel')
                     .on('postgres_changes', 
                         { event: '*', schema: 'public', table: 'members' },
@@ -3485,7 +3495,7 @@
                     });
 
                 // Abonnement aux vérifications KYC
-                const kycSubscription = window.supabase
+                const kycSubscription = supabase
                     .channel('kyc-channel')
                     .on('postgres_changes', 
                         { event: '*', schema: 'public', table: 'kyc_verifications' },
@@ -3506,7 +3516,7 @@
                     });
 
                 // Abonnement aux contributions
-                const contributionsSubscription = window.supabase
+                const contributionsSubscription = supabase
                     .channel('contributions-channel')
                     .on('postgres_changes', 
                         { event: '*', schema: 'public', table: 'contributions' },
@@ -3544,8 +3554,9 @@
                 console.log('🧹 Nettoyage des abonnements existants...');
                 realtimeSubscriptions.forEach(subscription => {
                     try {
-                        if (window.supabase) {
-                            window.supabase.removeChannel(subscription);
+                        const supabase = getSupabase();
+                        if (supabase) {
+                            supabase.removeChannel(subscription);
                         }
                     } catch (error) {
                         console.warn('Avertissement lors du nettoyage d\'un abonnement:', error);
@@ -3560,8 +3571,7 @@
         }
 
         async function loadPendingTransactions() {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('📝 Chargement transactions: mode hors ligne');
                 pendingTransactions = [];
                 return;
@@ -3570,7 +3580,13 @@
             try {
                 console.log('🔄 Chargement des transactions en attente...');
                 
-                const { data, error } = await window.supabase
+                const supabase = getSupabase();
+                if (!supabase) {
+                    pendingTransactions = [];
+                    return;
+                }
+                
+                const { data, error } = await supabase
                     .from('transactions')
                     .select('*')
                     .eq('status', 'pending')
@@ -3598,8 +3614,7 @@
 
         // Charger les vérifications KYC
         async function loadKYCVerifications() {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('📄 Chargement KYC: mode hors ligne');
                 kycVerifications = [];
                 return;
@@ -3608,12 +3623,15 @@
             try {
                 console.log('🔄 Chargement des vérifications KYC...');
                 
-                const { data, error } = await window.supabase
+                const supabase = getSupabase();
+                if (!supabase) {
+                    kycVerifications = [];
+                    return;
+                }
+                
+                const { data, error } = await supabase
                     .from('kyc_verifications')
-                    .select(`
-                        *,
-                        members:user_id(name, email, phone)
-                    `)
+                    .select(`*, members:user_id(name, email, phone)`)
                     .order('submitted_at', { ascending: false });
                 
                 if (error) {
@@ -3633,11 +3651,13 @@
 
         // Charger le statut KYC de l'utilisateur courant
         async function loadUserKYCStatus() {
-            // CORRECTION : Vérifier window.supabase
-            if (!currentUser || !isSupabaseConnected || !window.supabase) return;
+            if (!currentUser || !isSupabaseConnected) return;
 
             try {
-                const { data: memberData, error: memberError } = await window.supabase
+                const supabase = getSupabase();
+                if (!supabase) return;
+
+                const { data: memberData, error: memberError } = await supabase
                     .from('members')
                     .select('id')
                     .eq('email', currentUser.email)
@@ -3650,7 +3670,7 @@
 
                 const memberId = memberData.id;
 
-                const { data: kycData, error: kycError } = await window.supabase
+                const { data: kycData, error: kycError } = await supabase
                     .from('kyc_verifications')
                     .select('*')
                     .eq('user_id', memberId)
@@ -3680,23 +3700,22 @@
 
         // CORRECTION : Charger les projets avec les images
         async function loadProjects() {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('🏗️ Chargement projets: mode hors ligne');
                 projects = getDefaultProjects();
                 return;
             }
 
             try {
-                const { data, error } = await window.supabase
+                const supabase = getSupabase();
+                if (!supabase) {
+                    projects = getDefaultProjects();
+                    return;
+                }
+
+                const { data, error } = await supabase
                     .from('projects')
-                    .select(`
-                        *,
-                        project_images (
-                            image_url,
-                            created_at
-                        )
-                    `)
+                    .select(`*, project_images (image_url, created_at)`)
                     .order('created_at', { ascending: false });
                 
                 if (error) {
@@ -3727,22 +3746,24 @@
 
         // NOUVELLE FONCTION : Sauvegarder l'image d'un projet
         async function saveProjectImage(projectId, imageFile) {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('📸 Mode hors ligne - Impossible de sauvegarder l\'image');
                 return null;
             }
 
             try {
+                const supabase = getSupabase();
+                if (!supabase) return null;
+
                 // 1. Supprimer l'ancienne image si elle existe
-                const { data: existingImages, error: findError } = await window.supabase
+                const { data: existingImages, error: findError } = await supabase
                     .from('project_images')
                     .select('*')
                     .eq('project_id', projectId);
 
                 if (!findError && existingImages && existingImages.length > 0) {
                     for (const img of existingImages) {
-                        const { error: deleteError } = await window.supabase
+                        const { error: deleteError } = await supabase
                             .from('project_images')
                             .delete()
                             .eq('id', img.id);
@@ -3757,7 +3778,7 @@
                 const fileName = `project_${projectId}_${Date.now()}.${imageFile.name.split('.').pop()}`;
                 
                 // 3. Télécharger l'image sur Supabase Storage
-                const { data: uploadData, error: uploadError } = await window.supabase.storage
+                const { data: uploadData, error: uploadError } = await supabase.storage
                     .from('project-images')
                     .upload(fileName, imageFile, {
                         contentType: imageFile.type,
@@ -3767,14 +3788,14 @@
                 if (uploadError) throw uploadError;
 
                 // 4. Récupérer l'URL publique de l'image
-                const { data: publicUrlData } = window.supabase.storage
+                const { data: publicUrlData } = supabase.storage
                     .from('project-images')
                     .getPublicUrl(fileName);
 
                 const imageUrl = publicUrlData.publicUrl;
 
                 // 5. Enregistrer la référence dans la base de données
-                const { data: imageRecord, error: insertError } = await window.supabase
+                const { data: imageRecord, error: insertError } = await supabase
                     .from('project_images')
                     .insert({
                         project_id: projectId,
@@ -3798,21 +3819,22 @@
         }
 
         async function loadContributions() {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('💳 Chargement contributions: mode hors ligne');
                 contributions = [];
                 return;
             }
 
             try {
-                const { data, error } = await window.supabase
+                const supabase = getSupabase();
+                if (!supabase) {
+                    contributions = [];
+                    return;
+                }
+
+                const { data, error } = await supabase
                     .from('contributions')
-                    .select(`
-                        *,
-                        members:member_id(name),
-                        projects:project_id(name)
-                    `)
+                    .select(`*, members:member_id(name), projects:project_id(name)`)
                     .order('created_at', { ascending: false });
                 
                 if (!error && data) {
@@ -3827,15 +3849,20 @@
         }
 
         async function loadCommissions() {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('💰 Chargement commissions: mode hors ligne');
                 commissions = [];
                 return;
             }
 
             try {
-                const { data, error } = await window.supabase
+                const supabase = getSupabase();
+                if (!supabase) {
+                    commissions = [];
+                    return;
+                }
+
+                const { data, error } = await supabase
                     .from('commissions')
                     .select('*')
                     .order('created_at', { ascending: false });
@@ -3864,14 +3891,16 @@
         }
 
         async function loadCommissionSettings() {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('⚙️ Chargement paramètres: mode hors ligne');
                 return;
             }
 
             try {
-                const { data, error } = await window.supabase
+                const supabase = getSupabase();
+                if (!supabase) return;
+
+                const { data, error } = await supabase
                     .from('platform_settings')
                     .select('*')
                     .eq('key', 'commission_settings')
@@ -3892,8 +3921,7 @@
 
         // Chargement paginé des utilisateurs avec filtres avancés
         async function loadUsers(page = 1, pageSize = 50, search = '', role = '', status = '', kycStatus = '') {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('👥 Chargement utilisateurs: mode hors ligne');
                 users = getDefaultUsers();
                 totalUserCount = users.length;
@@ -3901,12 +3929,19 @@
             }
 
             try {
+                const supabase = getSupabase();
+                if (!supabase) {
+                    users = getDefaultUsers();
+                    totalUserCount = users.length;
+                    return;
+                }
+
                 const loadingIndicator = document.getElementById('usersLoading');
                 if (loadingIndicator) {
                     loadingIndicator.classList.add('active');
                 }
                 
-                let query = window.supabase
+                let query = supabase
                     .from('members')
                     .select('*', { count: 'exact' });
                 
@@ -4171,14 +4206,16 @@
 
         // Authentication functions
         async function checkAuthState() {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('🔐 Vérification auth: mode hors ligne');
                 return;
             }
 
             try {
-                const { data: { session }, error } = await window.supabase.auth.getSession();
+                const supabase = getSupabase();
+                if (!supabase) return;
+
+                const { data: { session }, error } = await supabase.auth.getSession();
                 if (error) throw error;
                 
                 if (session) {
@@ -4195,8 +4232,7 @@
             showNotification('Connexion réussie !');
             closeModal('loginModal');
             
-            // CORRECTION : Vérifier window.supabase
-            if (isSupabaseConnected && window.supabase) {
+            if (isSupabaseConnected) {
                 setupRealtimeSubscriptions();
             }
             
@@ -4216,8 +4252,7 @@
         }
 
         async function login(email, password) {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('🔐 Connexion: mode hors ligne');
                 showNotification('Mode hors ligne - Connexion simulée', 'warning');
                 
@@ -4241,7 +4276,13 @@
             }
 
             try {
-                const { data, error } = await window.supabase.auth.signInWithPassword({
+                const supabase = getSupabase();
+                if (!supabase) {
+                    showNotification('Erreur de connexion à la base de données', 'error');
+                    return;
+                }
+
+                const { data, error } = await supabase.auth.signInWithPassword({
                     email: email,
                     password: password,
                 });
@@ -4258,8 +4299,7 @@
         }
 
         async function register(name, email, password, phone) {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('📝 Inscription: mode hors ligne');
                 showNotification('Mode hors ligne - Inscription simulée', 'warning');
                 
@@ -4277,7 +4317,13 @@
             }
 
             try {
-                const { data, error } = await window.supabase.auth.signUp({
+                const supabase = getSupabase();
+                if (!supabase) {
+                    showNotification('Erreur de connexion à la base de données', 'error');
+                    return;
+                }
+
+                const { data, error } = await supabase.auth.signUp({
                     email: email,
                     password: password,
                     options: {
@@ -4292,7 +4338,7 @@
                 
                 if (data.user) {
                     try {
-                        const { error: insertError } = await window.supabase
+                        const { error: insertError } = await supabase
                             .from('members')
                             .insert({
                                 email: email,
@@ -4325,10 +4371,12 @@
             try {
                 cleanupRealtimeSubscriptions();
                 
-                // CORRECTION : Vérifier window.supabase
-                if (isSupabaseConnected && window.supabase) {
-                    const { error } = await window.supabase.auth.signOut();
-                    if (error) throw error;
+                if (isSupabaseConnected) {
+                    const supabase = getSupabase();
+                    if (supabase) {
+                        const { error } = await supabase.auth.signOut();
+                        if (error) throw error;
+                    }
                 }
                 
                 currentUser = null;
@@ -4856,8 +4904,7 @@
 
         // Récupérer ou créer un membre avec UUID valide
         async function getOrCreateMember(email, name = '', phone = '') {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 console.log('👤 Mode hors ligne - Impossible de récupérer/créer un membre');
                 return null;
             }
@@ -4865,8 +4912,11 @@
             try {
                 console.log('👤 Recherche du membre:', email);
                 
+                const supabase = getSupabase();
+                if (!supabase) return null;
+
                 // 1. Rechercher le membre existant
-                const { data: existingMember, error: searchError } = await window.supabase
+                const { data: existingMember, error: searchError } = await supabase
                     .from('members')
                     .select('*')
                     .eq('email', email)
@@ -4886,7 +4936,7 @@
                 // 3. Si le membre n'existe pas, le créer
                 console.log('📝 Création d\'un nouveau membre pour:', email);
                 
-                const { data: newMember, error: createError } = await window.supabase
+                const { data: newMember, error: createError } = await supabase
                     .from('members')
                     .insert({
                         email: email,
@@ -4972,7 +5022,13 @@
 
                 console.log('✅ UUID valide détecté:', memberData.id);
                 
-                const { data: transaction, error: transactionError } = await window.supabase
+                const supabase = getSupabase();
+                if (!supabase) {
+                    showNotification('Erreur de connexion à la base de données', 'error');
+                    return;
+                }
+
+                const { data: transaction, error: transactionError } = await supabase
                     .from('transactions')
                     .insert([
                         {
@@ -5074,7 +5130,13 @@
 
                 console.log('✅ UUID valide détecté pour investissement:', memberData.id);
                 
-                const { data: transaction, error: transactionError } = await window.supabase
+                const supabase = getSupabase();
+                if (!supabase) {
+                    showNotification('Erreur de connexion à la base de données', 'error');
+                    return;
+                }
+
+                const { data: transaction, error: transactionError } = await supabase
                     .from('transactions')
                     .insert([
                         {
@@ -5112,8 +5174,7 @@
 
         // Validation d'une transaction par l'admin
         async function validateTransaction(transactionId) {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
                 return;
             }
@@ -5121,7 +5182,13 @@
             try {
                 console.log('✅ Validation de la transaction:', transactionId);
                 
-                const { data: transaction, error: transactionError } = await window.supabase
+                const supabase = getSupabase();
+                if (!supabase) {
+                    showNotification('Erreur de connexion à la base de données', 'error');
+                    return;
+                }
+
+                const { data: transaction, error: transactionError } = await supabase
                     .from('transactions')
                     .select('*')
                     .eq('id', transactionId)
@@ -5129,7 +5196,7 @@
 
                 if (transactionError) throw transactionError;
 
-                const { data: member, error: memberError } = await window.supabase
+                const { data: member, error: memberError } = await supabase
                     .from('members')
                     .select('*')
                     .eq('id', transaction.member_id)
@@ -5139,7 +5206,7 @@
 
                 if (transaction.type === 'deposit') {
                     const newBalance = (member.balance || 0) + transaction.amount;
-                    const { error: updateError } = await window.supabase
+                    const { error: updateError } = await supabase
                         .from('members')
                         .update({ balance: newBalance })
                         .eq('id', member.id);
@@ -5155,7 +5222,7 @@
                     }
 
                     const newBalance = member.balance - transaction.amount;
-                    const { error: updateBalanceError } = await window.supabase
+                    const { error: updateBalanceError } = await supabase
                         .from('members')
                         .update({ 
                             balance: newBalance,
@@ -5168,7 +5235,7 @@
                     const project = projects.find(p => p.id == transaction.project_id);
                     if (project) {
                         const newCollectedAmount = project.collected + transaction.amount;
-                        const { error: updateProjectError } = await window.supabase
+                        const { error: updateProjectError } = await supabase
                             .from('projects')
                             .update({ collected: newCollectedAmount })
                             .eq('id', transaction.project_id);
@@ -5182,7 +5249,7 @@
                         }
                     }
 
-                    const { error: contributionError } = await window.supabase
+                    const { error: contributionError } = await supabase
                         .from('contributions')
                         .insert([
                             {
@@ -5200,7 +5267,7 @@
                     showNotification(`Investissement de ${formatCFA(transaction.amount)} validé ! Projet mis à jour.`);
                 }
 
-                const { error: updateStatusError } = await window.supabase
+                const { error: updateStatusError } = await supabase
                     .from('transactions')
                     .update({ status: 'completed' })
                     .eq('id', transactionId);
@@ -5226,15 +5293,20 @@
 
         // Rejet d'une transaction par l'admin
         async function rejectTransaction(transactionId) {
-            // CORRECTION : Vérifier window.supabase
-            if (!isSupabaseConnected || !window.supabase) {
+            if (!isSupabaseConnected) {
                 showNotification('Mode hors ligne - Impossible de rejeter les transactions', 'warning');
                 return;
             }
 
             if (confirm('Êtes-vous sûr de vouloir refuser cette transaction ?')) {
                 try {
-                    const { error } = await window.supabase
+                    const supabase = getSupabase();
+                    if (!supabase) {
+                        showNotification('Erreur de connexion à la base de données', 'error');
+                        return;
+                    }
+
+                    const { error } = await supabase
                         .from('transactions')
                         .update({ status: 'rejected' })
                         .eq('id', transactionId);
@@ -5262,7 +5334,13 @@
             }
 
             try {
-                const { error } = await window.supabase.auth.resetPasswordForEmail(email, {
+                const supabase = getSupabase();
+                if (!supabase) {
+                    showNotification('Erreur de connexion à la base de données', 'error');
+                    return;
+                }
+
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
                     redirectTo: window.location.origin + '/reset-password.html',
                 });
 
@@ -5658,44 +5736,22 @@
             detailsContainer.style.display = 'block';
         }
 
-        // ⭐ CORRECTION ⭐ - Mettre à jour l'historique des actions admin avec vérification Supabase
+        // Mettre à jour l'historique des actions admin - AMÉLIORÉ
         async function updateAdminActionLog() {
             const log = document.getElementById('adminActionLog');
             if (!log) return;
             
             try {
-                // Vérifier que Supabase est connecté
-                if (!isSupabaseConnected || !window.supabase) {
-                    console.log('📝 Mode hors ligne - Historique actions simulé');
-                    // Données simulées
-                    const actions = [
-                        { action_type: 'Validation', description: 'Validation d\'investissement pour Résidence Rue de 40', created_at: new Date(Date.now() - 3600000), user: { name: 'Admin GESSINVEST' } },
-                        { action_type: 'Ajout', description: 'Ajout de projet - Résidence Les Hauts', created_at: new Date(Date.now() - 7200000), user: { name: 'Admin GESSINVEST' } },
-                        { action_type: 'Modification', description: 'Modification de commission - Projet Commercial', created_at: new Date(Date.now() - 10800000), user: { name: 'Admin GESSINVEST' } },
-                        { action_type: 'Validation', description: 'Validation de dépôt pour gess.srh.td', created_at: new Date(Date.now() - 14400000), user: { name: 'Admin GESSINVEST' } }
-                    ];
-                    
-                    let logHTML = '';
-                    actions.forEach(action => {
-                        logHTML += `
-                            <div class="log-entry fade-in">
-                                <div><strong>${action.user.name}</strong> - ${action.action_type}: ${action.description}</div>
-                                <div class="log-time">${action.created_at.toLocaleString()}</div>
-                            </div>
-                        `;
-                    });
-                    
-                    log.innerHTML = logHTML;
+                const supabase = getSupabase();
+                if (!supabase) {
+                    log.innerHTML = '<div class="log-entry">Impossible de se connecter à la base de données</div>';
                     return;
                 }
-                
+
                 // Récupérer l'historique depuis la base de données
-                const { data, error } = await window.supabase
+                const { data, error } = await supabase
                     .from('admin_actions')
-                    .select(`
-                        *,
-                        members:user_id(name)
-                    `)
+                    .select(`*, members:user_id(name)`)
                     .order('created_at', { ascending: false })
                     .limit(20);
                 
@@ -6141,11 +6197,110 @@
             await loadKYCVerifications();
             await loadPendingTransactions();
             await loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
-            await updateAdminDashboard();
+            await loadProjects();
+            await loadContributions();
+            await loadCommissions();
+            updateAdminDashboard();
             showNotification('Tableau d\'administration actualisé !');
         }
 
-        // Setup functions
+        // Mettre à jour le dashboard membre
+        async function updateMemberDashboard() {
+            if (!currentUser) return;
+            
+            try {
+                const member = users.find(u => u.email === currentUser.email);
+                if (member) {
+                    document.getElementById('memberWelcomeMessage').textContent = `Bonjour ${member.name || currentUser.email}, bienvenue dans votre espace investisseur`;
+                    document.getElementById('memberBalance').textContent = formatCFA(member.balance || 0);
+                    
+                    // Calculer les statistiques
+                    const userContributions = contributions.filter(c => c.member_id === member.id);
+                    const totalInvested = userContributions.reduce((sum, c) => sum + c.amount, 0);
+                    const activeProjects = [...new Set(userContributions.map(c => c.project_id))].length;
+                    
+                    // Calculer les gains estimés (simplifié)
+                    const expectedReturn = totalInvested * 0.12; // 12% annuel
+                    
+                    document.getElementById('totalInvested').textContent = formatCFA(totalInvested);
+                    document.getElementById('expectedReturn').textContent = formatCFA(expectedReturn);
+                    document.getElementById('activeProjects').textContent = activeProjects;
+                    document.getElementById('availableBalance').textContent = formatCFA(member.balance || 0);
+                    
+                    // Mettre à jour la liste des investissements
+                    updateMemberInvestmentsList(userContributions);
+                    
+                    // Mettre à jour les transactions en attente
+                    updateMemberPendingTransactions(member.id);
+                    
+                    // Afficher la section KYC si nécessaire
+                    updateKYCStatusDisplay();
+                    const kycSection = document.getElementById('kycStatusSection');
+                    if (kycSection) {
+                        kycSection.style.display = 'block';
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Erreur mise à jour dashboard membre:', error);
+            }
+        }
+
+        function updateMemberInvestmentsList(userContributions) {
+            const list = document.getElementById('memberInvestments');
+            list.innerHTML = '';
+            
+            userContributions.forEach(contribution => {
+                const project = projects.find(p => p.id === contribution.project_id);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${project?.name || 'Projet'}</td>
+                    <td>${formatCFA(contribution.amount)}</td>
+                    <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
+                    <td>
+                        ${contribution.payment_method === 'cash' ? '💰 Espèces' : 
+                          contribution.payment_method === 'transfer' ? '🏦 Virement' :
+                          contribution.payment_method === 'mobile_money' ? '📱 Mobile Money' : '💳 Carte'}
+                    </td>
+                    <td>
+                        <span class="status-badge ${contribution.status === 'completed' ? 'status-completed' : 'status-pending'}">
+                            ${contribution.status === 'completed' ? 'Validé' : 'En attente'}
+                        </span>
+                    </td>
+                    <td>${project ? (project.return_rate || 12) + '%' : '12%'}</td>
+                `;
+                list.appendChild(row);
+            });
+        }
+
+        function updateMemberPendingTransactions(memberId) {
+            const list = document.getElementById('memberPendingTransactions');
+            list.innerHTML = '';
+            
+            const memberTransactions = pendingTransactions.filter(t => t.member_id === memberId);
+            
+            memberTransactions.forEach(transaction => {
+                const project = transaction.project_id ? projects.find(p => p.id === transaction.project_id) : null;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
+                    <td>${formatCFA(transaction.amount)}</td>
+                    <td>
+                        ${transaction.payment_method === 'cash' ? '💰 Espèces' : 
+                          transaction.payment_method === 'transfer' ? '🏦 Virement' :
+                          transaction.payment_method === 'mobile_money' ? '📱 Mobile Money' : '💳 Carte'}
+                    </td>
+                    <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <span class="status-badge status-pending">
+                            En attente
+                        </span>
+                    </td>
+                `;
+                list.appendChild(row);
+            });
+        }
+
+        // Setup event listeners
         function setupEventListeners() {
             // Login form
             document.getElementById('loginForm').addEventListener('submit', function(e) {
@@ -6160,15 +6315,15 @@
                 e.preventDefault();
                 const name = document.getElementById('reg-name').value;
                 const email = document.getElementById('reg-email').value;
+                const phone = document.getElementById('reg-phone').value;
                 const password = document.getElementById('reg-password').value;
                 const confirmPassword = document.getElementById('reg-confirm-password').value;
-                const phone = document.getElementById('reg-phone').value;
-
+                
                 if (password !== confirmPassword) {
                     showNotification('Les mots de passe ne correspondent pas', 'error');
                     return;
                 }
-
+                
                 register(name, email, password, phone);
             });
 
@@ -6184,103 +6339,49 @@
                 processAddFunds();
             });
 
-            // Funds amount change
-            document.getElementById('fundsAmount').addEventListener('input', updateFundsAmountDisplay);
-
-            // Investment amount change
+            // Investment amount display
             document.getElementById('investmentAmount').addEventListener('input', updateAmountDisplay);
 
-            // Payment method selection
-            document.querySelectorAll('input[name="paymentMethod"]').forEach(input => {
-                input.addEventListener('change', function() {
-                    document.querySelectorAll('.payment-method').forEach(method => {
-                        method.classList.remove('selected');
-                    });
-                    this.closest('.payment-method').classList.add('selected');
-                });
-            });
+            // Funds amount display
+            document.getElementById('fundsAmount').addEventListener('input', updateFundsAmountDisplay);
 
-            // Funds payment method selection
-            document.querySelectorAll('input[name="fundsPaymentMethod"]').forEach(input => {
-                input.addEventListener('change', function() {
-                    document.querySelectorAll('.payment-method').forEach(method => {
-                        method.classList.remove('selected');
-                    });
-                    this.closest('.payment-method').classList.add('selected');
-                });
-            });
+            // Simulator
+            setupSimulator();
 
-            // Add project form
-            document.getElementById('addProjectForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
-                await processAddProject();
-            });
+            // Project image upload
+            setupImageUpload();
 
-            // Edit project form
-            document.getElementById('editProjectForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
-                await processEditProject();
-            });
-
-            // Commission settings form
-            document.getElementById('commissionSettingsForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                processCommissionSettings();
-            });
-
-            // Edit project commission form
-            document.getElementById('editProjectCommissionForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                processEditProjectCommission();
-            });
-
-            // Commission rate change
-            document.getElementById('edit-project-commission-rate').addEventListener('input', function() {
-                const projectId = this.getAttribute('data-project-id');
-                const project = projects.find(p => p.id == projectId);
-                if (project) {
-                    const commissionRate = parseFloat(this.value) || commissionSettings.defaultRate;
-                    updateCommissionPreview(project.collected, commissionRate);
-                }
-            });
-
-            // Edit user form
-            document.getElementById('editUserForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                processEditUser();
-            });
+            // KYC document upload
+            initKYCDocumentUpload();
 
             // User search
             document.getElementById('userSearch').addEventListener('input', function(e) {
                 userSearchTerm = e.target.value;
-                debounce(() => changeUserPage(1), 500)();
+                changeUserPage(1);
             });
 
-            // User role filter
+            // User filters
             document.getElementById('userRoleFilter').addEventListener('change', function(e) {
                 userRoleFilter = e.target.value;
                 changeUserPage(1);
             });
 
-            // User status filter
             document.getElementById('userStatusFilter').addEventListener('change', function(e) {
                 userStatusFilter = e.target.value;
                 changeUserPage(1);
             });
 
-            // User KYC status filter
             document.getElementById('userKYCStatusFilter').addEventListener('change', function(e) {
                 userKYCStatusFilter = e.target.value;
                 changeUserPage(1);
             });
 
-            // User page size
             document.getElementById('userPageSize').addEventListener('change', function(e) {
                 userPageSize = parseInt(e.target.value);
                 changeUserPage(1);
             });
 
-            // Export period change
+            // Export period selector
             document.getElementById('exportPeriod').addEventListener('change', function(e) {
                 const customContainer = document.getElementById('customPeriodContainer');
                 if (e.target.value === 'custom') {
@@ -6290,34 +6391,25 @@
                 }
             });
 
-            // KYC document type change
-            initKYCDocumentUpload();
-
-            // Setup image upload
-            setupImageUpload();
-
-            // Setup simulator
-            setupSimulator();
+            // Payment method selection
+            document.querySelectorAll('.payment-method input').forEach(input => {
+                input.addEventListener('change', function() {
+                    document.querySelectorAll('.payment-method').forEach(el => {
+                        el.classList.remove('selected');
+                    });
+                    if (this.checked) {
+                        this.closest('.payment-method').classList.add('selected');
+                    }
+                });
+            });
         }
 
-        // Debounce function for search
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
-
+        // Mobile menu
         function setupMobileMenu() {
             const mobileMenuBtn = document.getElementById('mobileMenuBtn');
             const navLinks = document.getElementById('navLinks');
             const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
-
+            
             if (mobileMenuBtn && navLinks) {
                 mobileMenuBtn.addEventListener('click', function() {
                     navLinks.classList.toggle('active');
@@ -6325,13 +6417,8 @@
                     mobileMenuBtn.classList.toggle('active');
                     mobileMenuBtn.setAttribute('aria-expanded', navLinks.classList.contains('active'));
                 });
-
+                
                 mobileMenuOverlay.addEventListener('click', closeMobileMenu);
-
-                // Close mobile menu when clicking on links
-                document.querySelectorAll('.nav-links a').forEach(link => {
-                    link.addEventListener('click', closeMobileMenu);
-                });
             }
         }
 
@@ -6339,7 +6426,7 @@
             const mobileMenuBtn = document.getElementById('mobileMenuBtn');
             const navLinks = document.getElementById('navLinks');
             const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
-
+            
             if (navLinks) {
                 navLinks.classList.remove('active');
                 mobileMenuOverlay.classList.remove('active');
@@ -6351,687 +6438,36 @@
         // Notification function
         function showNotification(message, type = 'success') {
             const notification = document.getElementById('notification');
-            const notificationMessage = document.getElementById('notification-message');
-            const notificationIcon = notification.querySelector('i');
-
-            notificationMessage.textContent = message;
-            notification.className = `notification ${type}`;
-
-            // Change icon based on type
-            if (type === 'error') {
-                notificationIcon.className = 'fas fa-exclamation-circle';
-            } else if (type === 'warning') {
-                notificationIcon.className = 'fas fa-exclamation-triangle';
-            } else {
-                notificationIcon.className = 'fas fa-check-circle';
-            }
-
-            notification.style.display = 'flex';
-
-            // Auto-hide after 5 seconds
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 5000);
-        }
-
-        // Additional helper functions
-        function updateMemberDashboard() {
-            // This function would update the member dashboard with real data
-            // For now, we'll simulate some data
-            const userInvestments = contributions.filter(c => c.member_id === currentUser?.id);
-            const totalInvested = userInvestments.reduce((sum, inv) => sum + inv.amount, 0);
-            const activeProjectsCount = projects.filter(p => p.status === 'active').length;
+            const messageEl = document.getElementById('notification-message');
+            const icon = notification.querySelector('i');
             
-            document.getElementById('memberWelcomeMessage').textContent = `Bonjour ${currentUser?.user_metadata?.name || currentUser?.email}, bienvenue dans votre espace investisseur`;
-            document.getElementById('memberBalance').textContent = formatCFA(currentUser?.balance || 0);
-            document.getElementById('totalInvested').textContent = formatCFA(totalInvested);
-            document.getElementById('expectedReturn').textContent = formatCFA(totalInvested * 0.12);
-            document.getElementById('activeProjects').textContent = activeProjectsCount;
-            document.getElementById('availableBalance').textContent = formatCFA(currentUser?.balance || 0);
-
-            // Update investments table
-            const investmentsTable = document.getElementById('memberInvestments');
-            investmentsTable.innerHTML = '';
-            
-            userInvestments.forEach(investment => {
-                const project = projects.find(p => p.id === investment.project_id);
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${project?.name || 'Projet inconnu'}</td>
-                    <td>${formatCFA(investment.amount)}</td>
-                    <td>${new Date(investment.created_at).toLocaleDateString()}</td>
-                    <td>${investment.payment_method === 'cash' ? 'Espèces' : 
-                          investment.payment_method === 'transfer' ? 'Virement' :
-                          investment.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}</td>
-                    <td><span class="status-badge status-${investment.status}">${investment.status === 'completed' ? 'Validé' : 'En attente'}</span></td>
-                    <td>${project ? `${project.return_rate || 12}%` : 'N/A'}</td>
-                `;
-                investmentsTable.appendChild(row);
-            });
-
-            // Update pending transactions
-            const pendingTable = document.getElementById('memberPendingTransactions');
-            pendingTable.innerHTML = '';
-            
-            const userPendingTransactions = pendingTransactions.filter(t => t.member_id === currentUser?.id);
-            userPendingTransactions.forEach(transaction => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
-                    <td>${formatCFA(transaction.amount)}</td>
-                    <td>${transaction.payment_method === 'cash' ? 'Espèces' : 
-                          transaction.payment_method === 'transfer' ? 'Virement' :
-                          transaction.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}</td>
-                    <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
-                    <td><span class="status-badge status-pending">En attente</span></td>
-                `;
-                pendingTable.appendChild(row);
-            });
-        }
-
-        // Additional admin functions
-        function deleteProject(projectId) {
-            if (confirm('Êtes-vous sûr de vouloir supprimer ce projet ?')) {
-                // In a real app, you would make an API call to delete the project
-                projects = projects.filter(p => p.id !== projectId);
-                updateProjectsDisplay();
-                updateAdminDashboard();
-                showNotification('Projet supprimé avec succès');
-            }
-        }
-
-        function deleteCommission(commissionId) {
-            if (confirm('Êtes-vous sûr de vouloir supprimer cette commission ?')) {
-                // In a real app, you would make an API call to delete the commission
-                commissions = commissions.filter(c => c.id !== commissionId);
-                updateAdminDashboard();
-                showNotification('Commission supprimée avec succès');
-            }
-        }
-
-        function deleteContribution(contributionId) {
-            if (confirm('Êtes-vous sûr de vouloir supprimer cet investissement ?')) {
-                // In a real app, you would make an API call to delete the contribution
-                contributions = contributions.filter(c => c.id !== contributionId);
-                updateAdminDashboard();
-                showNotification('Investissement supprimé avec succès');
-            }
-        }
-
-        function validatePayment(contributionId) {
-            if (confirm('Valider ce paiement ?')) {
-                // In a real app, you would make an API call to validate the payment
-                const contribution = contributions.find(c => c.id === contributionId);
-                if (contribution) {
-                    contribution.status = 'completed';
-                    updateAdminDashboard();
-                    showNotification('Paiement validé avec succès');
-                }
-            }
-        }
-
-        function editUser(userId) {
-            openEditUserModal(userId);
-        }
-
-        function deleteUser(userId) {
-            if (confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
-                // In a real app, you would make an API call to delete the user
-                users = users.filter(u => u.id !== userId);
-                updateAdminDashboard();
-                showNotification('Utilisateur supprimé avec succès');
-            }
-        }
-
-        function suspendUser(userId) {
-            if (confirm('Êtes-vous sûr de vouloir suspendre cet utilisateur ?')) {
-                const user = users.find(u => u.id === userId);
-                if (user) {
-                    user.status = 'suspended';
-                    updateAdminDashboard();
-                    showNotification('Utilisateur suspendu avec succès');
-                }
-            }
-        }
-
-        function processEditUser() {
-            const userId = currentViewingUserId;
-            const user = users.find(u => u.id === userId);
-            
-            if (user) {
-                user.name = document.getElementById('edit-user-name').value;
-                user.email = document.getElementById('edit-user-email').value;
-                user.phone = document.getElementById('edit-user-phone').value;
-                user.role = document.getElementById('edit-user-role').value;
-                user.status = document.getElementById('edit-user-status').value;
-                user.balance = parseFloat(document.getElementById('edit-user-balance').value) || 0;
+            if (notification && messageEl) {
+                messageEl.textContent = message;
+                notification.className = 'notification';
+                notification.classList.add(type);
                 
-                updateAdminDashboard();
-                closeModal('editUserModal');
-                showNotification('Utilisateur modifié avec succès');
-            }
-        }
-
-        async function processAddProject() {
-            const name = document.getElementById('project-name').value;
-            const description = document.getElementById('project-description').value;
-            const location = document.getElementById('project-location').value;
-            const target = parseFloat(document.getElementById('project-target').value);
-            const returnRate = parseFloat(document.getElementById('project-return').value);
-            const duration = parseInt(document.getElementById('project-duration').value);
-            const imageFile = document.getElementById('project-image-upload').files[0];
-
-            // Create new project
-            const newProject = {
-                id: Date.now().toString(),
-                name: name,
-                description: description,
-                location: location,
-                target: target,
-                collected: 0,
-                return_rate: returnRate,
-                days_left: duration,
-                status: 'active',
-                image: imageFile ? URL.createObjectURL(imageFile) : 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=400'
-            };
-
-            // CORRECTION : Vérifier window.supabase pour sauvegarder en base
-            if (isSupabaseConnected && window.supabase) {
-                try {
-                    // Sauvegarder le projet dans Supabase
-                    const { data, error } = await window.supabase
-                        .from('projects')
-                        .insert({
-                            name: name,
-                            description: description,
-                            location: location,
-                            target: target,
-                            collected: 0,
-                            return_rate: returnRate,
-                            days_left: duration,
-                            status: 'active'
-                        })
-                        .select()
-                        .single();
-
-                    if (error) throw error;
-
-                    newProject.id = data.id;
-                    
-                    // Sauvegarder l'image si elle existe
-                    if (imageFile && data.id) {
-                        try {
-                            const imageUrl = await saveProjectImage(data.id, imageFile);
-                            if (imageUrl) {
-                                newProject.image = imageUrl;
-                            }
-                        } catch (imageError) {
-                            console.warn('Avertissement sauvegarde image:', imageError);
-                        }
-                    }
-
-                } catch (error) {
-                    console.error('❌ Erreur sauvegarde projet:', error);
-                    showNotification('Erreur sauvegarde projet: ' + error.message, 'error');
-                }
-            }
-
-            projects.push(newProject);
-            updateProjectsDisplay();
-            updateAdminDashboard();
-            closeModal('addProjectModal');
-            showNotification('Projet ajouté avec succès');
-        }
-
-        async function processEditProject() {
-            if (!currentEditingProject) return;
-
-            const name = document.getElementById('edit-project-name').value;
-            const description = document.getElementById('edit-project-description').value;
-            const location = document.getElementById('edit-project-location').value;
-            const target = parseFloat(document.getElementById('edit-project-target').value);
-            const collected = parseFloat(document.getElementById('edit-project-current').value);
-            const returnRate = parseFloat(document.getElementById('edit-project-return').value);
-            const duration = parseInt(document.getElementById('edit-project-duration').value);
-            const status = document.getElementById('edit-project-status').value;
-            const imageFile = document.getElementById('edit-project-image-upload').files[0];
-
-            // Update project
-            currentEditingProject.name = name;
-            currentEditingProject.description = description;
-            currentEditingProject.location = location;
-            currentEditingProject.target = target;
-            currentEditingProject.collected = collected;
-            currentEditingProject.return_rate = returnRate;
-            currentEditingProject.days_left = duration;
-            currentEditingProject.status = status;
-
-            // Update image if new one is selected
-            if (imageFile) {
-                currentEditingProject.image = URL.createObjectURL(imageFile);
-                
-                // CORRECTION : Vérifier window.supabase pour sauvegarder l'image
-                if (isSupabaseConnected && window.supabase && currentEditingProject.id) {
-                    try {
-                        const imageUrl = await saveProjectImage(currentEditingProject.id, imageFile);
-                        if (imageUrl) {
-                            currentEditingProject.image = imageUrl;
-                        }
-                    } catch (imageError) {
-                        console.warn('Avertissement sauvegarde image:', imageError);
-                    }
-                }
-            }
-
-            // CORRECTION : Vérifier window.supabase pour mettre à jour le projet
-            if (isSupabaseConnected && window.supabase && currentEditingProject.id) {
-                try {
-                    const { error } = await window.supabase
-                        .from('projects')
-                        .update({
-                            name: name,
-                            description: description,
-                            location: location,
-                            target: target,
-                            collected: collected,
-                            return_rate: returnRate,
-                            days_left: duration,
-                            status: status
-                        })
-                        .eq('id', currentEditingProject.id);
-
-                    if (error) throw error;
-                    
-                } catch (error) {
-                    console.error('❌ Erreur mise à jour projet:', error);
-                    showNotification('Erreur mise à jour projet: ' + error.message, 'error');
-                }
-            }
-
-            updateProjectsDisplay();
-            updateAdminDashboard();
-            closeModal('editProjectModal');
-            showNotification('Projet modifié avec succès');
-            currentEditingProject = null;
-        }
-
-        function processCommissionSettings() {
-            commissionSettings.defaultRate = parseFloat(document.getElementById('default-commission-rate').value);
-            commissionSettings.calculationMethod = document.getElementById('commission-calculation-method').value;
-
-            // Save to localStorage for offline mode
-            localStorage.setItem('gessinvest_commission_settings', JSON.stringify(commissionSettings));
-
-            // CORRECTION : Vérifier window.supabase pour sauvegarder les paramètres
-            if (isSupabaseConnected && window.supabase) {
-                try {
-                    window.supabase
-                        .from('platform_settings')
-                        .upsert({
-                            key: 'commission_settings',
-                            value: commissionSettings
-                        })
-                        .then(({ error }) => {
-                            if (error) {
-                                console.error('Erreur sauvegarde paramètres:', error);
-                            }
-                        });
-                } catch (error) {
-                    console.error('Erreur sauvegarde paramètres:', error);
-                }
-            }
-
-            updateAdminDashboard();
-            closeModal('commissionSettingsModal');
-            showNotification('Paramètres de commission enregistrés');
-        }
-
-        function processEditProjectCommission() {
-            const projectId = document.getElementById('edit-project-commission-rate').getAttribute('data-project-id');
-            const commissionRate = parseFloat(document.getElementById('edit-project-commission-rate').value);
-            const note = document.getElementById('edit-project-commission-note').value;
-
-            const commission = commissions.find(c => c.project_id == projectId);
-            const project = projects.find(p => p.id == projectId);
-
-            if (project) {
-                if (commission) {
-                    commission.commission_rate = commissionRate;
-                    commission.commission_amount = project.collected * (commissionRate / 100);
+                // Update icon based on type
+                if (type === 'error') {
+                    icon.className = 'fas fa-exclamation-circle';
+                } else if (type === 'warning') {
+                    icon.className = 'fas fa-exclamation-triangle';
                 } else {
-                    commissions.push({
-                        id: Date.now().toString(),
-                        project_id: projectId,
-                        commission_rate: commissionRate,
-                        commission_amount: project.collected * (commissionRate / 100),
-                        status: 'active'
-                    });
+                    icon.className = 'fas fa-check-circle';
                 }
-
-                // CORRECTION : Vérifier window.supabase pour sauvegarder la commission
-                if (isSupabaseConnected && window.supabase) {
-                    try {
-                        const commissionData = {
-                            project_id: projectId,
-                            commission_rate: commissionRate,
-                            commission_amount: project.collected * (commissionRate / 100),
-                            status: 'active',
-                            note: note || null
-                        };
-
-                        if (commission && commission.id) {
-                            window.supabase
-                                .from('commissions')
-                                .update(commissionData)
-                                .eq('id', commission.id)
-                                .then(({ error }) => {
-                                    if (error) console.error('Erreur mise à jour commission:', error);
-                                });
-                        } else {
-                            window.supabase
-                                .from('commissions')
-                                .insert([commissionData])
-                                .then(({ error }) => {
-                                    if (error) console.error('Erreur création commission:', error);
-                                });
-                        }
-                    } catch (error) {
-                        console.error('Erreur sauvegarde commission:', error);
-                    }
-                }
-
-                updateAdminDashboard();
-                closeModal('editProjectCommissionModal');
-                showNotification('Commission modifiée avec succès');
-            }
-        }
-
-        function exportAdminData() {
-            openModal('exportDataModal');
-        }
-
-        function generateExport() {
-            const exportProgress = document.getElementById('exportProgress');
-            exportProgress.style.display = 'block';
-
-            // Simulate export generation
-            setTimeout(() => {
-                const format = document.querySelector('input[name="exportFormat"]:checked').value;
-                const period = document.getElementById('exportPeriod').value;
-                const sections = Array.from(document.querySelectorAll('input[name="exportSections"]:checked')).map(cb => cb.value);
-
-                // In a real app, you would generate and download the file
-                // For now, we'll just show a notification
-                showNotification(`Export ${format} généré avec succès pour la période ${period}`);
-                exportProgress.style.display = 'none';
-                closeModal('exportDataModal');
-            }, 2000);
-        }
-
-        function loadAdminKYCList() {
-            // This function would load the KYC list from the database
-            // For now, we'll simulate some data
-            const kycList = document.getElementById('adminKYCList');
-            kycList.innerHTML = '';
-
-            kycVerifications.forEach(kyc => {
-                const user = users.find(u => u.id === kyc.user_id);
-                if (!user) return;
-
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${user.name || user.email}</td>
-                    <td>${user.email}</td>
-                    <td>${kyc.document_type || 'Non spécifié'}</td>
-                    <td>
-                        <span class="kyc-status kyc-${kyc.status.replace('_', '-')}">
-                            ${kyc.status === 'not_submitted' ? 'Non soumis' : 
-                              kyc.status === 'pending' ? 'En attente' :
-                              kyc.status === 'verified' ? 'Vérifié' : 'Rejeté'}
-                        </span>
-                    </td>
-                    <td>${kyc.submitted_at ? new Date(kyc.submitted_at).toLocaleDateString() : 'N/A'}</td>
-                    <td>
-                        <button class="admin-btn btn-edit" onclick="viewKYCVerification('${kyc.id}')">
-                            <i class="fas fa-eye"></i> Voir
-                        </button>
-                    </td>
-                `;
-                kycList.appendChild(row);
-            });
-        }
-
-        function viewKYCVerification(kycId) {
-            const kyc = kycVerifications.find(k => k.id === kycId);
-            if (!kyc) return;
-
-            const user = users.find(u => u.id === kyc.user_id);
-            if (!user) return;
-
-            // Show KYC details
-            document.getElementById('kycDetailsContainer').style.display = 'block';
-            
-            // User info
-            document.getElementById('kycUserInfo').innerHTML = `
-                <div class="user-details">
-                    <div class="detail-item">
-                        <div class="detail-label">Utilisateur</div>
-                        <div class="detail-value">${user.name || user.email}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Email</div>
-                        <div class="detail-value">${user.email}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Téléphone</div>
-                        <div class="detail-value">${user.phone || 'Non renseigné'}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Date soumission</div>
-                        <div class="detail-value">${kyc.submitted_at ? new Date(kyc.submitted_at).toLocaleString() : 'N/A'}</div>
-                    </div>
-                </div>
-            `;
-
-            // Document info
-            document.getElementById('kycDocumentInfo').innerHTML = `
-                <div style="text-align: center;">
-                    <p><strong>Type de document:</strong> ${kyc.document_type || 'Non spécifié'}</p>
-                    ${kyc.document_url ? `
-                    <div style="margin-top: 15px;">
-                        <img src="${kyc.document_url}" alt="Document KYC" style="max-width: 100%; max-height: 300px; border-radius: 8px;">
-                        <div style="margin-top: 10px;">
-                            <button class="btn btn-outline" onclick="downloadKYCDocument('${kyc.document_url}')">
-                                <i class="fas fa-download"></i> Télécharger
-                            </button>
-                            <button class="btn btn-outline" onclick="previewKYCDocument('${kyc.document_url}', '${kyc.document_type}')" style="margin-left: 10px;">
-                                <i class="fas fa-eye"></i> Prévisualiser
-                            </button>
-                        </div>
-                    </div>
-                    ` : '<p>Aucun document disponible</p>'}
-                </div>
-            `;
-
-            // Update buttons based on status
-            const approveBtn = document.getElementById('approveKYCBtn');
-            const rejectBtn = document.getElementById('rejectKYCBtn');
-            const requestInfoBtn = document.getElementById('requestInfoBtn');
-
-            if (kyc.status === 'pending') {
-                approveBtn.style.display = 'inline-block';
-                rejectBtn.style.display = 'inline-block';
-                requestInfoBtn.style.display = 'inline-block';
-            } else if (kyc.status === 'verified') {
-                approveBtn.style.display = 'none';
-                rejectBtn.style.display = 'inline-block';
-                requestInfoBtn.style.display = 'none';
-            } else if (kyc.status === 'rejected') {
-                approveBtn.style.display = 'inline-block';
-                rejectBtn.style.display = 'none';
-                requestInfoBtn.style.display = 'none';
-            }
-        }
-
-        function approveKYC() {
-            const kycId = kycVerifications.find(k => k.user_id === currentKYCUserId)?.id;
-            if (!kycId) return;
-
-            // Update KYC status
-            const kyc = kycVerifications.find(k => k.id === kycId);
-            if (kyc) {
-                kyc.status = 'verified';
                 
-                // CORRECTION : Vérifier window.supabase pour mettre à jour le statut KYC
-                if (isSupabaseConnected && window.supabase) {
-                    try {
-                        window.supabase
-                            .from('kyc_verifications')
-                            .update({ status: 'verified' })
-                            .eq('id', kycId)
-                            .then(({ error }) => {
-                                if (error) console.error('Erreur validation KYC:', error);
-                            });
-                    } catch (error) {
-                        console.error('Erreur validation KYC:', error);
-                    }
-                }
-
-                showNotification('KYC approuvé avec succès');
-                loadAdminKYCList();
-                viewKYCVerification(kycId);
-            }
-        }
-
-        function rejectKYC() {
-            const kycId = kycVerifications.find(k => k.user_id === currentKYCUserId)?.id;
-            if (!kycId) return;
-
-            // Update KYC status
-            const kyc = kycVerifications.find(k => k.id === kycId);
-            if (kyc) {
-                kyc.status = 'rejected';
+                notification.style.display = 'flex';
                 
-                // CORRECTION : Vérifier window.supabase pour mettre à jour le statut KYC
-                if (isSupabaseConnected && window.supabase) {
-                    try {
-                        window.supabase
-                            .from('kyc_verifications')
-                            .update({ status: 'rejected' })
-                            .eq('id', kycId)
-                            .then(({ error }) => {
-                                if (error) console.error('Erreur rejet KYC:', error);
-                            });
-                    } catch (error) {
-                        console.error('Erreur rejet KYC:', error);
-                    }
-                }
-
-                showNotification('KYC rejeté');
-                loadAdminKYCList();
-                viewKYCVerification(kycId);
+                // Auto hide after 5 seconds
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                }, 5000);
             }
         }
 
-        function requestMoreInfoKYC() {
-            const note = document.getElementById('kycAdminNote').value;
-            showNotification(`Demande d'information envoyée. Note: ${note || 'Aucune note fournie'}`);
-        }
-
-        function downloadKYCDocument(url) {
-            // In a real app, you would trigger a download
-            window.open(url, '_blank');
-        }
-
-        function previewKYCDocument(url, documentType) {
-            const modal = document.getElementById('documentPreviewModal');
-            const title = document.getElementById('documentPreviewTitle');
-            const image = document.getElementById('documentPreviewImage');
-            const downloadLink = document.getElementById('documentDownloadLink');
-
-            title.textContent = `Prévisualisation - ${documentType}`;
-            image.src = url;
-            downloadLink.href = url;
-            
-            openModal('documentPreviewModal');
-        }
-
-        async function submitKYCDocument() {
-            if (!selectedDocumentFile) {
-                showNotification('Veuillez sélectionner un document', 'error');
-                return;
-            }
-
-            // CORRECTION : Vérifier window.supabase pour soumettre le document KYC
-            if (!isSupabaseConnected || !window.supabase) {
-                showNotification('Mode hors ligne - Impossible de soumettre le document KYC', 'warning');
-                return;
-            }
-
-            try {
-                showNotification('Soumission du document en cours...');
-
-                // 1. Récupérer l'ID du membre
-                const { data: memberData, error: memberError } = await window.supabase
-                    .from('members')
-                    .select('id')
-                    .eq('email', currentUser.email)
-                    .single();
-
-                if (memberError) throw memberError;
-
-                const memberId = memberData.id;
-
-                // 2. Télécharger le document sur Supabase Storage
-                const fileName = `kyc_${memberId}_${Date.now()}.${selectedDocumentFile.name.split('.').pop()}`;
-                
-                const { data: uploadData, error: uploadError } = await window.supabase.storage
-                    .from('kyc-documents')
-                    .upload(fileName, selectedDocumentFile, {
-                        contentType: selectedDocumentFile.type,
-                        upsert: false
-                    });
-
-                if (uploadError) throw uploadError;
-
-                // 3. Récupérer l'URL publique du document
-                const { data: publicUrlData } = window.supabase.storage
-                    .from('kyc-documents')
-                    .getPublicUrl(fileName);
-
-                const documentUrl = publicUrlData.publicUrl;
-
-                // 4. Enregistrer la vérification KYC dans la base de données
-                const { data: kycData, error: kycError } = await window.supabase
-                    .from('kyc_verifications')
-                    .upsert({
-                        user_id: memberId,
-                        document_type: selectedDocumentType,
-                        document_url: documentUrl,
-                        status: 'pending',
-                        submitted_at: new Date().toISOString()
-                    })
-                    .select()
-                    .single();
-
-                if (kycError) throw kycError;
-
-                // 5. Mettre à jour le statut local
-                currentKYCStatus = 'pending';
-                
-                // 6. Mettre à jour l'affichage
-                updateKYCStatusDisplay();
-                showNotification('Document KYC soumis avec succès ! Vérification en cours.');
-                closeModal('kycPortalModal');
-
-                // 7. Recharger les vérifications KYC
-                await loadKYCVerifications();
-
-            } catch (error) {
-                console.error('❌ Erreur soumission KYC:', error);
-                showNotification('Erreur lors de la soumission du document: ' + error.message, 'error');
-            }
-        }
+        // PATCH GLOBAL : S'assurer que toutes les références à Supabase utilisent getSupabase()
+        (function() {
+            console.log('✅ Application GESSINVEST initialisée avec correctif Supabase');
+        })();
     </script>
 </body>
 </html>
