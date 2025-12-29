@@ -6494,6 +6494,87 @@
                     
                     // Réactiver le bouton
                     this.disabled = false;
+					async function submitKYCDocument() {
+  try {
+    // 1) Vérifier l'utilisateur connecté
+    const { data: authData, error: authError } = await window.supabaseClient.auth.getUser();
+    if (authError || !authData?.user) {
+      showNotification("❌ Vous devez être connecté pour soumettre un KYC", "error");
+      return;
+    }
+    const userId = authData.user.id;
+
+    // 2) Récupérer le fichier et le type de document
+    const fileInput = document.getElementById("kycFileInput");
+    const typeSelect = document.getElementById("kycTypeSelect");
+    const file = fileInput?.files?.[0];
+    const docType = typeSelect?.value;
+
+    if (!file) {
+      showNotification("⚠️ Aucun fichier sélectionné", "warning");
+      return;
+    }
+    if (!docType) {
+      showNotification("⚠️ Sélectionnez un type de document", "warning");
+      return;
+    }
+
+    // 3) Construire le chemin du fichier
+    const timestamp = Date.now();
+    const safeName = file.name.replace(/\s+/g, "_");
+    const filePath = `${userId}/kyc_${userId}_${docType}_${timestamp}_${safeName}`;
+
+    // 4) Upload dans le bucket "kyc_documents"
+    const { error: uploadError } = await window.supabaseClient
+      .storage
+      .from("kyc_documents")
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error("❌ Erreur upload KYC:", uploadError);
+      showNotification("Erreur lors de l'upload du document KYC", "error");
+      return;
+    }
+
+    // 5) Récupérer l'URL publique
+    const { data: publicUrlData } = window.supabaseClient
+      .storage
+      .from("kyc_documents")
+      .getPublicUrl(filePath);
+    const fileUrl = publicUrlData?.publicUrl || null;
+
+    // 6) Mettre à jour la table kyc_verifications
+    const { error: upsertError } = await window.supabaseClient
+      .from("kyc_verifications")
+      .upsert({
+        user_id: userId,
+        status: "submitted",
+        document_type: docType,
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        documents: [
+          {
+            type: docType,
+            file_url: fileUrl,
+            file_name: safeName,
+            uploaded_at: new Date().toISOString()
+          }
+        ]
+      }, { onConflict: "user_id" });
+
+    if (upsertError) {
+      console.error("❌ Erreur enregistrement KYC:", upsertError);
+      showNotification("Erreur lors de l'enregistrement KYC", "error");
+      return;
+    }
+
+    showNotification("✅ Document KYC soumis avec succès");
+    document.getElementById("submitKYCBtn")?.setAttribute("disabled", "disabled");
+  } catch (error) {
+    console.error("❌ Erreur soumission KYC:", error);
+    showNotification("Erreur inattendue lors de la soumission KYC", "error");
+  }
+}
                     this.innerHTML = '<i class="fas fa-paper-plane"></i> Soumettre pour vérification';
                 }
             });
