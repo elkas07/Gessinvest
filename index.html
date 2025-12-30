@@ -3244,7 +3244,6 @@
         let userPageSize = 50;
         let totalUserCount = 0;
         let userSearchTerm = '';
-;
         let userRoleFilter = '';
         let userStatusFilter = '';
         let userKYCStatusFilter = '';
@@ -4735,9 +4734,9 @@
             document.getElementById('kycDocumentUpload').value = '';
         }
 
-        // ⭐⭐ CORRECTION MAJEURE ⭐⭐ - Fonction pour soumettre un document KYC
+        // ⭐⭐ CORRECTION MAJEURE ⭐⭐ - Fonction pour soumettre un document KYC - CORRIGÉ
         async function submitKYCDocument() {
-            if (!currentUser || !currentUser.id) {
+            if (!currentUser || !currentUser.email) {
                 showNotification('Veuillez vous connecter', 'error');
                 return;
             }
@@ -4770,12 +4769,67 @@
                 progressBar.style.width = '10%';
                 progressPercentage.textContent = '10%';
 
-                // 1. Uploader le document vers Supabase Storage
-                const safeFileName = `${currentUser.id}_${Date.now()}_${selectedDocumentType}_${selectedDocumentFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-                const filePath = `kyc_documents/${safeFileName}`;
-                
+                // ⭐⭐ CORRECTION CRITIQUE : Récupérer d'abord le membre depuis la table members ⭐⭐
                 progressBar.style.width = '30%';
                 progressPercentage.textContent = '30%';
+                progressText.textContent = 'Recherche de votre profil...';
+
+                // Récupérer le membre par son email
+                let memberData;
+                let memberError;
+                
+                const { data: existingMember, error: searchError } = await window.supabaseClient
+                    .from('members')
+                    .select('*')
+                    .eq('email', currentUser.email)
+                    .single();
+
+                if (searchError) {
+                    console.error('❌ Erreur recherche membre:', searchError);
+                    
+                    // Si le membre n'existe pas, le créer
+                    progressText.textContent = 'Création de votre profil...';
+                    progressBar.style.width = '40%';
+                    progressPercentage.textContent = '40%';
+                    
+                    const { data: newMember, error: createError } = await window.supabaseClient
+                        .from('members')
+                        .insert([
+                            {
+                                email: currentUser.email,
+                                name: currentUser.user_metadata?.name || currentUser.email.split('@')[0],
+                                phone: currentUser.user_metadata?.phone || '',
+                                role: 'investor',
+                                status: 'active',
+                                balance: 0,
+                                total_invested: 0
+                            }
+                        ])
+                        .select()
+                        .single();
+
+                    if (createError) {
+                        console.error('❌ Erreur création membre:', createError);
+                        throw new Error('Impossible de créer votre profil');
+                    }
+                    
+                    memberData = newMember;
+                } else {
+                    memberData = existingMember;
+                }
+
+                if (!memberData || !memberData.id) {
+                    throw new Error('Impossible de récupérer votre profil');
+                }
+
+                console.log('✅ Membre trouvé/créé:', memberData.id);
+
+                // 1. Uploader le document vers Supabase Storage
+                const safeFileName = `${memberData.id}_${Date.now()}_${selectedDocumentType}_${selectedDocumentFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+                const filePath = `kyc_documents/${safeFileName}`;
+                
+                progressBar.style.width = '50%';
+                progressPercentage.textContent = '50%';
                 progressText.textContent = 'Upload vers le serveur...';
 
                 const { data: uploadData, error: uploadError } = await window.supabaseClient.storage
@@ -4790,8 +4844,8 @@
                     throw new Error('Erreur lors du téléchargement du document');
                 }
 
-                progressBar.style.width = '60%';
-                progressPercentage.textContent = '60%';
+                progressBar.style.width = '70%';
+                progressPercentage.textContent = '70%';
                 progressText.textContent = 'Récupération de l\'URL...';
 
                 // 2. Récupérer l'URL publique du document
@@ -4801,113 +4855,32 @@
 
                 const fileUrl = urlData.publicUrl;
 
-                progressBar.style.width = '80%';
-                progressPercentage.textContent = '80%';
-                progressText.textContent = 'Recherche du membre...';
+                progressBar.style.width = '85%';
+                progressPercentage.textContent = '85%';
+                progressText.textContent = 'Enregistrement dans la base de données...';
 
-                // ⭐⭐ CORRECTION CRITIQUE ⭐⭐ - Récupérer le membre existant ou en créer un
-                // Rechercher d'abord le membre par email
-                const { data: memberData, error: memberError } = await window.supabaseClient
-                    .from('members')
-                    .select('id')
-                    .eq('email', currentUser.email)
-                    .maybeSingle(); // Utiliser maybeSingle au lieu de single
+                // 3. Créer ou mettre à jour l'enregistrement KYC
+                const kycData = {
+                    user_id: memberData.id, // ⭐ CORRECTION : Utiliser l'ID du membre, pas de l'utilisateur Auth
+                    document_type: selectedDocumentType,
+                    status: 'pending',
+                    submitted_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    documents: [
+                        {
+                            type: selectedDocumentType,
+                            file_name: selectedDocumentFile.name,
+                            file_url: fileUrl,
+                            file_size: selectedDocumentFile.size,
+                            uploaded_at: new Date().toISOString()
+                        }
+                    ]
+                };
 
-                if (memberError) {
-                    console.error('❌ Erreur recherche membre:', memberError);
-                    throw new Error('Erreur lors de la recherche de votre profil');
-                }
-
-                let memberId;
-
-                if (!memberData) {
-                    // Si le membre n'existe pas, le créer
-                    progressText.textContent = 'Création de votre profil...';
-                    
-                    const { data: newMember, error: createError } = await window.supabaseClient
-                        .from('members')
-                        .insert({
-                            email: currentUser.email,
-                            name: currentUser.user_metadata?.name || currentUser.email.split('@')[0],
-                            phone: currentUser.user_metadata?.phone || '',
-                            role: 'investor',
-                            status: 'active',
-                            balance: 0,
-                            total_invested: 0
-                        })
-                        .select('id')
-                        .single();
-
-                    if (createError) {
-                        console.error('❌ Erreur création membre:', createError);
-                        throw new Error('Erreur lors de la création de votre profil');
-                    }
-
-                    memberId = newMember.id;
-                    console.log('✅ Nouveau membre créé avec ID:', memberId);
-                } else {
-                    memberId = memberData.id;
-                    console.log('✅ Membre existant trouvé avec ID:', memberId);
-                }
-
-                progressBar.style.width = '90%';
-                progressPercentage.textContent = '90%';
-                progressText.textContent = 'Enregistrement KYC...';
-
-                // 3. Vérifier si un KYC existe déjà pour cet utilisateur
-                const { data: existingKYC, error: checkError } = await window.supabaseClient
+                // ⭐⭐ CORRECTION : Utiliser upsert avec onConflict pour gérer les mises à jour
+                const { error: kycError } = await window.supabaseClient
                     .from('kyc_verifications')
-                    .select('id')
-                    .eq('user_id', memberId)
-                    .maybeSingle();
-
-                let kycError;
-                
-                if (existingKYC) {
-                    // Mettre à jour le KYC existant
-                    const { error: updateError } = await window.supabaseClient
-                        .from('kyc_verifications')
-                        .update({
-                            document_type: selectedDocumentType,
-                            status: 'pending',
-                            documents: [
-                                {
-                                    type: selectedDocumentType,
-                                    file_name: selectedDocumentFile.name,
-                                    file_url: fileUrl,
-                                    file_size: selectedDocumentFile.size,
-                                    uploaded_at: new Date().toISOString()
-                                }
-                            ],
-                            submitted_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('id', existingKYC.id);
-                    
-                    kycError = updateError;
-                } else {
-                    // Créer un nouveau KYC
-                    const { error: insertError } = await window.supabaseClient
-                        .from('kyc_verifications')
-                        .insert({
-                            user_id: memberId, // ⭐ CORRECTION : Utiliser l'ID du membre
-                            document_type: selectedDocumentType,
-                            status: 'pending',
-                            documents: [
-                                {
-                                    type: selectedDocumentType,
-                                    file_name: selectedDocumentFile.name,
-                                    file_url: fileUrl,
-                                    file_size: selectedDocumentFile.size,
-                                    uploaded_at: new Date().toISOString()
-                                }
-                            ],
-                            submitted_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
-                        });
-                    
-                    kycError = insertError;
-                }
+                    .upsert(kycData);
 
                 if (kycError) {
                     console.error('❌ Erreur enregistrement KYC:', kycError);
@@ -4946,6 +4919,11 @@
                         submitBtn.disabled = false;
                         submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Soumettre pour vérification';
                     }
+                    
+                    // Cacher la barre de progression
+                    if (progressContainer) {
+                        progressContainer.style.display = 'none';
+                    }
                 }, 1000);
 
             } catch (error) {
@@ -4959,18 +4937,22 @@
                 }
                 
                 // Cacher la barre de progression
-                document.getElementById('uploadProgressContainer').style.display = 'none';
+                const progressContainer = document.getElementById('uploadProgressContainer');
+                if (progressContainer) {
+                    progressContainer.style.display = 'none';
+                }
                 
                 // Afficher message d'erreur adapté
                 let errorMessage = 'Erreur lors de la soumission du document';
-                if (error.message.includes('duplicate key') || error.code === '23505') {
+                
+                if (error.code === '23503') {
+                    errorMessage = 'Erreur : Votre profil n\'est pas correctement enregistré. Veuillez vous reconnecter.';
+                } else if (error.message.includes('duplicate key')) {
                     errorMessage = 'Vous avez déjà soumis un document KYC. Attendez la vérification ou contactez l\'administrateur.';
-                } else if (error.message.includes('storage') || error.code === 'storage') {
+                } else if (error.message.includes('storage')) {
                     errorMessage = 'Erreur de stockage du document. Veuillez réessayer.';
-                } else if (error.message.includes('403') || error.message.includes('RLS') || error.code === '42501') {
+                } else if (error.message.includes('403') || error.message.includes('RLS')) {
                     errorMessage = 'Erreur d\'autorisation. Veuillez vous reconnecter.';
-                } else if (error.code === '23503') {
-                    errorMessage = 'Erreur de profil. Veuillez contacter l\'administrateur pour vérifier votre compte.';
                 }
                 
                 showNotification(errorMessage, 'error');
@@ -6174,46 +6156,53 @@
             const today = new Date();
             const targetDate = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
             
+            // Générer le calendrier
             const year = targetDate.getFullYear();
             const month = targetDate.getMonth();
             
-            // Obtenir le premier jour du mois
+            // Créer les en-têtes de jours
+            const dayHeaders = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+            
+            // Premier jour du mois
             const firstDay = new Date(year, month, 1);
-            // Obtenir le dernier jour du mois
+            // Dernier jour du mois
             const lastDay = new Date(year, month + 1, 0);
-            
-            // Calculer le nombre de jours dans le mois
-            const daysInMonth = lastDay.getDate();
-            // Obtenir le jour de la semaine du premier jour (0 = Dimanche, 1 = Lundi, etc.)
-            const firstDayOfWeek = firstDay.getDay();
-            
-            // Noms des jours de la semaine
-            const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
             
             let calendarHTML = '';
             
-            // Ajouter les en-têtes des jours
-            dayNames.forEach(day => {
+            // En-têtes des jours
+            dayHeaders.forEach(day => {
                 calendarHTML += `<div class="calendar-day calendar-day-header">${day}</div>`;
             });
             
-            // Ajouter les cases vides pour aligner le premier jour
-            for (let i = 0; i < firstDayOfWeek; i++) {
+            // Jours vides avant le premier jour
+            for (let i = 0; i < firstDay.getDay(); i++) {
                 calendarHTML += `<div class="calendar-day"></div>`;
             }
             
-            // Ajouter les jours du mois
-            for (let day = 1; day <= daysInMonth; day++) {
+            // Jours du mois
+            for (let day = 1; day <= lastDay.getDate(); day++) {
                 const currentDate = new Date(year, month, day);
                 const dateString = currentDate.toISOString().split('T')[0];
                 
-                // Vérifier s'il y a des paiements programmés pour ce jour
-                const hasPayment = Math.random() > 0.7; // Simulation
+                // Vérifier s'il y a des paiements ce jour
+                const hasPayment = contributions.some(c => {
+                    const paymentDate = new Date(c.created_at).toISOString().split('T')[0];
+                    return paymentDate === dateString && c.status === 'completed';
+                });
+                
+                const paymentCount = contributions.filter(c => {
+                    const paymentDate = new Date(c.created_at).toISOString().split('T')[0];
+                    return paymentDate === dateString && c.status === 'completed';
+                }).length;
+                
+                const dayClass = hasPayment ? 'calendar-day has-payment' : 'calendar-day';
+                const tooltip = hasPayment ? `title="${paymentCount} paiement(s) ce jour"` : '';
                 
                 calendarHTML += `
-                    <div class="calendar-day ${hasPayment ? 'has-payment' : ''}" data-date="${dateString}" onclick="showPaymentDetails('${dateString}')">
-                        <div>${day}</div>
-                        ${hasPayment ? '<div style="font-size: 0.7rem; color: var(--success-color);">Paiement</div>' : ''}
+                    <div class="${dayClass}" ${tooltip} onclick="showDayPayments('${dateString}')">
+                        ${day}
+                        ${hasPayment ? `<div style="font-size: 0.7rem; margin-top: 3px; color: var(--success-color);">${paymentCount} paiement(s)</div>` : ''}
                     </div>
                 `;
             }
@@ -6221,27 +6210,38 @@
             calendar.innerHTML = calendarHTML;
         }
 
+        function showDayPayments(dateString) {
+            const dayPayments = contributions.filter(c => {
+                const paymentDate = new Date(c.created_at).toISOString().split('T')[0];
+                return paymentDate === dateString && c.status === 'completed';
+            });
+            
+            if (dayPayments.length === 0) return;
+            
+            const detailsDiv = document.getElementById('paymentCalendarDetails');
+            let detailsHTML = '<h4>Paiements du ' + new Date(dateString).toLocaleDateString() + '</h4>';
+            
+            dayPayments.forEach(payment => {
+                const user = users.find(u => u.id === payment.member_id);
+                const project = projects.find(p => p.id === payment.project_id);
+                
+                detailsHTML += `
+                    <div class="payment-details">
+                        <div><strong>Investisseur:</strong> ${user ? user.name : 'Inconnu'}</div>
+                        <div><strong>Projet:</strong> ${project ? project.name : 'Projet inconnu'}</div>
+                        <div><strong>Montant:</strong> ${formatCFA(payment.amount)}</div>
+                        <div><strong>Méthode:</strong> ${payment.payment_method}</div>
+                    </div>
+                `;
+            });
+            
+            detailsDiv.innerHTML = detailsHTML;
+            detailsDiv.style.display = 'block';
+        }
+
         function refreshPaymentCalendar() {
             updatePaymentCalendar();
             showNotification('Calendrier des paiements actualisé');
-        }
-
-        function showPaymentDetails(date) {
-            // Simulation des détails de paiement
-            const details = document.getElementById('paymentCalendarDetails');
-            details.innerHTML = `
-                <h4>Paiements pour le ${new Date(date).toLocaleDateString('fr-FR')}</h4>
-                <div class="payment-details">
-                    <p><strong>3 paiements programmés</strong></p>
-                    <ul>
-                        <li>Mohamed Ali - Résidence Rue de 40 - 15 000 CFA</li>
-                        <li>Fatima Oumar - Complexe Commercial Moundou - 25 000 CFA</li>
-                        <li>Ahmed Hassan - Villas Locatives Abéché - 10 000 CFA</li>
-                    </ul>
-                    <p>Total: <strong>50 000 CFA</strong></p>
-                </div>
-            `;
-            details.style.display = 'block';
         }
 
         // Mettre à jour l'historique des actions
@@ -6249,477 +6249,38 @@
             const actionLog = document.getElementById('adminActionLog');
             if (!actionLog) return;
             
+            // Simuler des actions récentes
             const actions = [
-                { action: 'Nouveau projet créé', user: 'Admin', time: 'Il y a 2 heures' },
-                { action: 'Transaction validée', user: 'Admin', time: 'Il y a 4 heures' },
-                { action: 'Utilisateur inscrit', user: 'fatima.oumar@gmail.com', time: 'Il y a 6 heures' },
-                { action: 'KYC approuvé', user: 'Admin', time: 'Il y a 1 jour' },
-                { action: 'Commission mise à jour', user: 'Admin', time: 'Il y a 2 jours' }
+                {
+                    text: 'Nouvel investissement dans "Résidence Rue de 40"',
+                    time: 'Il y a 2 heures',
+                    user: 'Utilisateur Test'
+                },
+                {
+                    text: 'Document KYC vérifié pour gess.srh.td',
+                    time: 'Il y a 3 heures',
+                    user: 'Admin'
+                },
+                {
+                    text: 'Transaction validée #TRX-00123',
+                    time: 'Il y a 5 heures',
+                    user: 'Admin'
+                },
+                {
+                    text: 'Nouvel utilisateur inscrit',
+                    time: 'Il y a 1 jour',
+                    user: 'Système'
+                }
             ];
             
             actionLog.innerHTML = actions.map(action => `
                 <div class="log-entry">
-                    <div><strong>${action.action}</strong> par ${action.user}</div>
-                    <div class="log-time">${action.time}</div>
+                    <div>${action.text}</div>
+                    <div class="log-time">${action.time} • Par ${action.user}</div>
                 </div>
             `).join('');
         }
 
-        // Mettre à jour la liste des projets admin
-        function updateAdminProjectsList() {
-            const projectsList = document.getElementById('adminProjectsList');
-            if (!projectsList) return;
-            
-            projectsList.innerHTML = projects.map(project => {
-                const progress = (project.collected / project.target) * 100;
-                return `
-                    <tr>
-                        <td>${project.name}</td>
-                        <td>${formatCFA(project.target)}</td>
-                        <td>${formatCFA(project.collected)}</td>
-                        <td>
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <div style="flex: 1; height: 8px; background-color: #e2e8f0; border-radius: 4px; overflow: hidden;">
-                                    <div style="height: 100%; background: var(--gradient-accent); width: ${Math.min(progress, 100)}%; border-radius: 4px;"></div>
-                                </div>
-                                <span>${Math.floor(progress)}%</span>
-                            </div>
-                        </td>
-                        <td>
-                            <span class="status-badge ${project.status === 'active' ? 'status-active' : project.status === 'completed' ? 'status-completed' : 'status-pending'}">
-                                ${project.status === 'active' ? 'Actif' : project.status === 'completed' ? 'Terminé' : 'En attente'}
-                            </span>
-                        </td>
-                        <td>
-                            <div class="admin-actions">
-                                <button class="admin-btn btn-edit" onclick="openEditProjectModal('${project.id}')">
-                                    <i class="fas fa-edit"></i> Modifier
-                                </button>
-                                <button class="admin-btn btn-delete" onclick="deleteProject('${project.id}')">
-                                    <i class="fas fa-trash"></i> Supprimer
-                                </button>
-                                <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${project.id}')">
-                                    <i class="fas fa-percentage"></i> Commission
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // Mettre à jour la liste des commissions admin
-        function updateAdminCommissionsList() {
-            const commissionsList = document.getElementById('adminCommissionsList');
-            if (!commissionsList) return;
-            
-            commissionsList.innerHTML = commissions.map(commission => {
-                const project = projects.find(p => p.id == commission.project_id);
-                if (!project) return '';
-                
-                return `
-                    <tr>
-                        <td>${project.name}</td>
-                        <td>${commission.commission_rate}%</td>
-                        <td>${formatCFA(commission.commission_amount)}</td>
-                        <td>${formatCFA(project.collected)}</td>
-                        <td>
-                            <span class="status-badge ${commission.status === 'active' ? 'status-active' : commission.status === 'pending' ? 'status-pending' : 'status-completed'}">
-                                ${commission.status === 'active' ? 'Active' : commission.status === 'pending' ? 'En attente' : 'Terminée'}
-                            </span>
-                        </td>
-                        <td>
-                            <div class="admin-actions">
-                                <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${commission.project_id}')">
-                                    <i class="fas fa-edit"></i> Modifier
-                                </button>
-                                <button class="admin-btn btn-delete" onclick="deleteCommission('${commission.id}')">
-                                    <i class="fas fa-trash"></i> Supprimer
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // Mettre à jour la liste des utilisateurs admin
-        function updateAdminUsersList() {
-            const usersList = document.getElementById('adminUsersList');
-            if (!usersList) return;
-            
-            usersList.innerHTML = users.map(user => {
-                const kycDoc = kycVerifications.find(k => k.user_id === user.id);
-                const kycStatus = kycDoc ? kycDoc.status : 'not_submitted';
-                const kycStatusText = kycStatus === 'not_submitted' ? 'Non soumis' : 
-                                     kycStatus === 'pending' ? 'En attente' :
-                                     kycStatus === 'verified' ? 'Vérifié' : 'Rejeté';
-                
-                return `
-                    <tr>
-                        <td>${user.name || 'Non renseigné'}</td>
-                        <td>${user.email}</td>
-                        <td>${user.phone || 'Non renseigné'}</td>
-                        <td>
-                            <span class="status-badge ${user.role === 'admin' ? 'status-active' : 'status-pending'}">
-                                ${user.role === 'admin' ? 'Admin' : 'Investisseur'}
-                            </span>
-                        </td>
-                        <td>
-                            <span class="kyc-status kyc-${kycStatus.replace('_', '-')}">
-                                ${kycStatusText}
-                            </span>
-                        </td>
-                        <td>${formatCFA(user.total_invested || 0)}</td>
-                        <td>${formatCFA(user.balance || 0)}</td>
-                        <td>${new Date(user.created_at).toLocaleDateString()}</td>
-                        <td>
-                            <div class="admin-actions">
-                                <button class="admin-btn btn-edit" onclick="openUserDetailsModal('${user.id}')">
-                                    <i class="fas fa-eye"></i> Voir
-                                </button>
-                                <button class="admin-btn btn-edit" onclick="openEditUserModal('${user.id}')">
-                                    <i class="fas fa-edit"></i> Modifier
-                                </button>
-                                <button class="admin-btn btn-delete" onclick="deleteUser('${user.id}')">
-                                    <i class="fas fa-trash"></i> Supprimer
-                                </button>
-                                ${user.status === 'suspended' ? 
-                                `<button class="admin-btn btn-validate" onclick="suspendUser('${user.id}')">
-                                    <i class="fas fa-play"></i> Réactiver
-                                </button>` : 
-                                `<button class="admin-btn btn-suspend" onclick="suspendUser('${user.id}')">
-                                    <i class="fas fa-pause"></i> Suspendre
-                                </button>`}
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // Mettre à jour la liste des investissements admin
-        function updateAdminInvestmentsList() {
-            const investmentsList = document.getElementById('adminInvestmentsList');
-            if (!investmentsList) return;
-            
-            investmentsList.innerHTML = contributions.slice(0, 10).map(contribution => {
-                const user = users.find(u => u.id === contribution.member_id);
-                const project = projects.find(p => p.id === contribution.project_id);
-                
-                return `
-                    <tr>
-                        <td>${user ? user.name : 'Utilisateur inconnu'}</td>
-                        <td>${project ? project.name : 'Projet inconnu'}</td>
-                        <td>${formatCFA(contribution.amount)}</td>
-                        <td>${contribution.payment_method === 'cash' ? 'Espèces' : 
-                              contribution.payment_method === 'transfer' ? 'Virement' : 
-                              contribution.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}</td>
-                        <td>
-                            <span class="status-badge ${contribution.status === 'completed' ? 'status-active' : 'status-pending'}">
-                                ${contribution.status === 'completed' ? 'Validé' : 'En attente'}
-                            </span>
-                        </td>
-                        <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
-                        <td>
-                            <div class="admin-actions">
-                                ${contribution.status !== 'completed' ? 
-                                `<button class="admin-btn btn-validate" onclick="validatePayment('${contribution.id}')">
-                                    <i class="fas fa-check"></i> Valider
-                                </button>` : ''}
-                                <button class="admin-btn btn-delete" onclick="deleteContribution('${contribution.id}')">
-                                    <i class="fas fa-trash"></i> Supprimer
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // Mettre à jour les transactions en attente admin
-        function updateAdminPendingTransactions() {
-            const pendingTransactionsList = document.getElementById('adminPendingTransactions');
-            if (!pendingTransactionsList) return;
-            
-            if (pendingTransactions.length === 0) {
-                pendingTransactionsList.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucune transaction en attente</td></tr>';
-                return;
-            }
-            
-            pendingTransactionsList.innerHTML = pendingTransactions.map(transaction => {
-                const user = users.find(u => u.id === transaction.member_id);
-                const project = transaction.project_id ? projects.find(p => p.id === transaction.project_id) : null;
-                
-                return `
-                    <tr>
-                        <td>${user ? user.name : 'Utilisateur inconnu'}</td>
-                        <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
-                        <td>${formatCFA(transaction.amount)}</td>
-                        <td>${transaction.payment_method === 'cash' ? 'Espèces' : 
-                              transaction.payment_method === 'transfer' ? 'Virement' : 
-                              transaction.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}</td>
-                        <td>${project ? project.name : 'N/A'}</td>
-                        <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
-                        <td>
-                            <div class="admin-actions">
-                                <button class="admin-btn btn-validate" onclick="validateTransaction('${transaction.id}')">
-                                    <i class="fas fa-check"></i> Valider
-                                </button>
-                                <button class="admin-btn btn-delete" onclick="rejectTransaction('${transaction.id}')">
-                                    <i class="fas fa-times"></i> Refuser
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // Mettre à jour le dashboard membre
-        async function updateMemberDashboard() {
-            if (!currentUser) return;
-            
-            // Calculer les statistiques
-            const memberInvestments = contributions.filter(c => c.member_id === currentUser.id);
-            const totalInvested = memberInvestments.reduce((sum, inv) => sum + inv.amount, 0);
-            const activeProjects = new Set(memberInvestments.map(inv => inv.project_id)).size;
-            
-            // Calculer les gains estimés (simulation)
-            const expectedReturn = totalInvested * 0.12; // 12% de rendement annuel
-            
-            document.getElementById('memberWelcomeMessage').textContent = `Bonjour ${currentUser.user_metadata?.name || currentUser.email}, bienvenue dans votre espace investisseur`;
-            document.getElementById('memberBalance').textContent = formatCFA(0); // À remplacer par le solde réel
-            document.getElementById('totalInvested').textContent = formatCFA(totalInvested);
-            document.getElementById('expectedReturn').textContent = formatCFA(expectedReturn);
-            document.getElementById('activeProjects').textContent = activeProjects;
-            document.getElementById('availableBalance').textContent = formatCFA(0); // À remplacer par le solde réel
-            
-            // Mettre à jour la liste des investissements
-            updateMemberInvestmentsList(memberInvestments);
-            
-            // Mettre à jour les transactions en attente
-            updateMemberPendingTransactions();
-        }
-
-        function updateMemberInvestmentsList(memberInvestments) {
-            const investmentsList = document.getElementById('memberInvestments');
-            if (!investmentsList) return;
-            
-            if (memberInvestments.length === 0) {
-                investmentsList.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucun investissement pour le moment</td></tr>';
-                return;
-            }
-            
-            investmentsList.innerHTML = memberInvestments.map(investment => {
-                const project = projects.find(p => p.id === investment.project_id);
-                const estimatedReturn = investment.amount * (project ? (project.return_rate || 12) / 100 : 0.12);
-                
-                return `
-                    <tr>
-                        <td>${project ? project.name : 'Projet inconnu'}</td>
-                        <td>${formatCFA(investment.amount)}</td>
-                        <td>${new Date(investment.created_at).toLocaleDateString()}</td>
-                        <td>${investment.payment_method === 'cash' ? 'Espèces' : 
-                              investment.payment_method === 'transfer' ? 'Virement' : 
-                              investment.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}</td>
-                        <td>
-                            <span class="status-badge ${investment.status === 'completed' ? 'status-active' : 'status-pending'}">
-                                ${investment.status === 'completed' ? 'Validé' : 'En attente'}
-                            </span>
-                        </td>
-                        <td>${formatCFA(estimatedReturn)}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        function updateMemberPendingTransactions() {
-            const pendingTransactionsList = document.getElementById('memberPendingTransactions');
-            if (!pendingTransactionsList) return;
-            
-            const memberPendingTransactions = pendingTransactions.filter(t => t.member_id === currentUser.id);
-            
-            if (memberPendingTransactions.length === 0) {
-                pendingTransactionsList.innerHTML = '<tr><td colspan="5" style="text-align: center;">Aucune transaction en attente</td></tr>';
-                return;
-            }
-            
-            pendingTransactionsList.innerHTML = memberPendingTransactions.map(transaction => {
-                return `
-                    <tr>
-                        <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
-                        <td>${formatCFA(transaction.amount)}</td>
-                        <td>${transaction.payment_method === 'cash' ? 'Espèces' : 
-                              transaction.payment_method === 'transfer' ? 'Virement' : 
-                              transaction.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}</td>
-                        <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
-                        <td>
-                            <span class="status-badge status-pending">
-                                En attente
-                            </span>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // Fonctions utilitaires
-        function showNotification(message, type = 'success') {
-            const notification = document.getElementById('notification');
-            const messageEl = document.getElementById('notification-message');
-            
-            if (!notification || !messageEl) return;
-            
-            messageEl.textContent = message;
-            notification.className = `notification ${type}`;
-            
-            // Changer l'icône selon le type
-            const icon = notification.querySelector('i');
-            if (icon) {
-                icon.className = type === 'error' ? 'fas fa-exclamation-circle' :
-                                type === 'warning' ? 'fas fa-exclamation-triangle' :
-                                'fas fa-check-circle';
-            }
-            
-            notification.style.display = 'flex';
-            
-            // Masquer automatiquement après 5 secondes
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, 5000);
-        }
-
-        // Configuration des événements
-        function setupEventListeners() {
-            // Formulaire de connexion
-            document.getElementById('loginForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const email = document.getElementById('login-email').value;
-                const password = document.getElementById('login-password').value;
-                login(email, password);
-            });
-
-            // Formulaire d'inscription
-            document.getElementById('registrationForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const name = document.getElementById('reg-name').value;
-                const email = document.getElementById('reg-email').value;
-                const password = document.getElementById('reg-password').value;
-                const confirmPassword = document.getElementById('reg-confirm-password').value;
-                const phone = document.getElementById('reg-phone').value;
-                
-                if (password !== confirmPassword) {
-                    showNotification('Les mots de passe ne correspondent pas', 'error');
-                    return;
-                }
-                
-                register(name, email, password, phone);
-            });
-
-            // Formulaire de mot de passe oublié
-            document.getElementById('forgotPasswordForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                processForgotPassword();
-            });
-
-            // Formulaire d'ajout de fonds
-            document.getElementById('addFundsForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                processAddFunds();
-            });
-
-            // Formulaire de simulateur
-            setupSimulator();
-
-            // Formulaire d'ajout de projet
-            document.getElementById('addProjectForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                // À implémenter
-                showNotification('Fonctionnalité à implémenter', 'warning');
-            });
-
-            // Formulaire de modification de projet
-            document.getElementById('editProjectForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                // À implémenter
-                showNotification('Fonctionnalité à implémenter', 'warning');
-            });
-
-            // Formulaire de paramètres de commission
-            document.getElementById('commissionSettingsForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                // À implémenter
-                showNotification('Fonctionnalité à implémenter', 'warning');
-            });
-
-            // Formulaire de modification de commission de projet
-            document.getElementById('editProjectCommissionForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                // À implémenter
-                showNotification('Fonctionnalité à implémenter', 'warning');
-            });
-
-            // Formulaire de modification d'utilisateur
-            document.getElementById('editUserForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                // À implémenter
-                showNotification('Fonctionnalité à implémenter', 'warning');
-            });
-
-            // Initialisation de l'upload d'image
-            setupImageUpload();
-
-            // Initialisation de l'upload de document KYC
-            initKYCDocumentUpload();
-
-            // Gestion de l'affichage du montant d'investissement
-            document.getElementById('investmentAmount')?.addEventListener('input', updateAmountDisplay);
-            
-            // Gestion de l'affichage du montant de fonds
-            document.getElementById('fundsAmount')?.addEventListener('input', updateFundsAmountDisplay);
-        }
-
-        // Configuration du menu mobile
-        function setupMobileMenu() {
-            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-            const navLinks = document.getElementById('navLinks');
-            const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
-            
-            if (mobileMenuBtn && navLinks) {
-                mobileMenuBtn.addEventListener('click', function() {
-                    this.classList.toggle('active');
-                    navLinks.classList.toggle('active');
-                    mobileMenuOverlay.classList.toggle('active');
-                    document.body.style.overflow = this.classList.contains('active') ? 'hidden' : '';
-                    
-                    // Mettre à jour l'attribut aria-expanded
-                    const isExpanded = this.classList.contains('active');
-                    this.setAttribute('aria-expanded', isExpanded);
-                });
-            }
-            
-            if (mobileMenuOverlay) {
-                mobileMenuOverlay.addEventListener('click', closeMobileMenu);
-            }
-        }
-
-        function closeMobileMenu() {
-            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-            const navLinks = document.getElementById('navLinks');
-            const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
-            
-            if (mobileMenuBtn) mobileMenuBtn.classList.remove('active');
-            if (navLinks) navLinks.classList.remove('active');
-            if (mobileMenuOverlay) mobileMenuOverlay.classList.remove('active');
-            document.body.style.overflow = '';
-            
-            if (mobileMenuBtn) {
-                mobileMenuBtn.setAttribute('aria-expanded', 'false');
-            }
-        }
-
-        // Fonctions de rafraîchissement
         function refreshMemberDashboard() {
             updateMemberDashboard();
             showNotification('Tableau de bord actualisé');
@@ -6727,17 +6288,24 @@
 
         function refreshAdminDashboard() {
             updateAdminDashboard();
-            showNotification('Tableau de bord admin actualisé');
+            showNotification('Administration actualisée');
         }
 
-        // Fonctions de filtrage
+        function exportAdminData() {
+            openModal('exportDataModal');
+        }
+
+        function generateExport() {
+            showNotification('Fonctionnalité d\'export en développement...', 'warning');
+            closeModal('exportDataModal');
+        }
+
         function toggleAdvancedFilters() {
             const filters = document.getElementById('advancedFilters');
             filters.classList.toggle('active');
         }
 
         function applyAdvancedFilters() {
-            // Récupérer les valeurs des filtres
             advancedFilters.dateStart = document.getElementById('filterDateStart').value;
             advancedFilters.dateEnd = document.getElementById('filterDateEnd').value;
             advancedFilters.minInvestment = document.getElementById('filterMinInvestment').value;
@@ -6746,13 +6314,11 @@
             advancedFilters.paymentMethod = document.getElementById('filterPaymentMethod').value;
             advancedFilters.sortBy = document.getElementById('filterSortBy').value;
             
-            // Recharger les utilisateurs avec les nouveaux filtres
-            loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter);
-            showNotification('Filtres appliqués avec succès');
+            loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            showNotification('Filtres avancés appliqués');
         }
 
         function resetAdvancedFilters() {
-            // Réinitialiser les champs
             document.getElementById('filterDateStart').value = '';
             document.getElementById('filterDateEnd').value = '';
             document.getElementById('filterMinInvestment').value = '';
@@ -6761,7 +6327,6 @@
             document.getElementById('filterPaymentMethod').value = '';
             document.getElementById('filterSortBy').value = 'created_at_desc';
             
-            // Réinitialiser les variables
             advancedFilters = {
                 dateStart: '',
                 dateEnd: '',
@@ -6772,46 +6337,813 @@
                 sortBy: 'created_at_desc'
             };
             
-            // Recharger les utilisateurs
-            loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter);
+            loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
             showNotification('Filtres réinitialisés');
         }
 
-        // Fonctions d'export
-        function exportAdminData() {
-            openModal('exportDataModal');
+        // Mettre à jour le tableau des utilisateurs admin
+        function updateAdminUsersList() {
+            const tableBody = document.getElementById('adminUsersList');
+            if (!tableBody) return;
+            
+            tableBody.innerHTML = '';
+            
+            users.forEach(user => {
+                // Trouver le statut KYC
+                const kycDoc = kycVerifications.find(k => k.user_id === user.id);
+                const kycStatus = kycDoc ? kycDoc.status : 'not_submitted';
+                const kycStatusText = kycStatus === 'not_submitted' ? 'Non soumis' : 
+                                     kycStatus === 'pending' ? 'En attente' :
+                                     kycStatus === 'verified' ? 'Vérifié' : 'Rejeté';
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${user.name || 'Non renseigné'}</td>
+                    <td>${user.email}</td>
+                    <td>${user.phone || 'Non renseigné'}</td>
+                    <td>
+                        <span class="status-badge ${user.role === 'admin' ? 'status-active' : 'status-pending'}">
+                            ${user.role === 'admin' ? 'Administrateur' : 'Investisseur'}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="kyc-status kyc-${kycStatus.replace('_', '-')}">
+                            ${kycStatusText}
+                        </span>
+                    </td>
+                    <td>${formatCFA(user.total_invested || 0)}</td>
+                    <td>${formatCFA(user.balance || 0)}</td>
+                    <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <div class="admin-actions">
+                            <button class="admin-btn btn-edit" onclick="openUserDetailsModal('${user.id}')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="admin-btn btn-edit" onclick="openEditUserModal('${user.id}')">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="admin-btn btn-suspend" onclick="suspendUser('${user.id}')">
+                                <i class="fas ${user.status === 'suspended' ? 'fa-play' : 'fa-pause'}"></i>
+                            </button>
+                            ${user.email !== 'elkas07@live.fr' ? `
+                            <button class="admin-btn btn-delete" onclick="deleteUser('${user.id}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            ` : ''}
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+            
+            // Mettre à jour la pagination
+            updatePaginationControls();
         }
 
-        function generateExport() {
-            // À implémenter
-            showNotification('Fonctionnalité d\'export à implémenter', 'warning');
+        function updatePaginationControls() {
+            const paginationInfo = document.getElementById('paginationInfo');
+            const paginationNumbers = document.getElementById('paginationNumbers');
+            
+            if (!paginationInfo || !paginationNumbers) return;
+            
+            const totalPages = Math.ceil(totalUserCount / userPageSize);
+            const startItem = (currentUserPage - 1) * userPageSize + 1;
+            const endItem = Math.min(currentUserPage * userPageSize, totalUserCount);
+            
+            paginationInfo.textContent = `Affichage ${startItem}-${endItem} sur ${totalUserCount} utilisateurs`;
+            
+            // Générer les numéros de page
+            let paginationHTML = '';
+            
+            // Bouton précédent
+            paginationHTML += `
+                <button class="pagination-number" ${currentUserPage === 1 ? 'disabled' : ''} onclick="changeUserPage(${currentUserPage - 1})">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+            `;
+            
+            // Numéros de page
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentUserPage - 2 && i <= currentUserPage + 2)) {
+                    paginationHTML += `
+                        <button class="pagination-number ${i === currentUserPage ? 'active' : ''}" onclick="changeUserPage(${i})">
+                            ${i}
+                        </button>
+                    `;
+                } else if (i === currentUserPage - 3 || i === currentUserPage + 3) {
+                    paginationHTML += `<span class="pagination-number">...</span>`;
+                }
+            }
+            
+            // Bouton suivant
+            paginationHTML += `
+                <button class="pagination-number" ${currentUserPage === totalPages ? 'disabled' : ''} onclick="changeUserPage(${currentUserPage + 1})">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            `;
+            
+            paginationNumbers.innerHTML = paginationHTML;
         }
 
-        // Fonctions KYC admin
-        function loadAdminKYCList() {
-            // À implémenter
-            showNotification('Fonctionnalité à implémenter', 'warning');
+        function changeUserPage(page) {
+            currentUserPage = page;
+            loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+        }
+
+        // Mettre à jour le tableau des projets admin
+        function updateAdminProjectsList() {
+            const tableBody = document.getElementById('adminProjectsList');
+            if (!tableBody) return;
+            
+            tableBody.innerHTML = '';
+            
+            projects.forEach(project => {
+                const progress = (project.collected / project.target) * 100;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${project.name}</td>
+                    <td>${formatCFA(project.target)}</td>
+                    <td>${formatCFA(project.collected)}</td>
+                    <td>
+                        <div class="progress-bar" style="margin: 0;">
+                            <div class="progress" style="width: ${Math.min(progress, 100)}%"></div>
+                        </div>
+                        <div style="text-align: center; margin-top: 5px; font-size: 0.85rem;">
+                            ${Math.floor(progress)}%
+                        </div>
+                    </td>
+                    <td>
+                        <span class="status-badge ${project.status === 'active' ? 'status-active' : project.status === 'completed' ? 'status-completed' : 'status-pending'}">
+                            ${project.status === 'active' ? 'En cours' : project.status === 'completed' ? 'Terminé' : 'En attente'}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="admin-actions">
+                            <button class="admin-btn btn-edit" onclick="openEditProjectModal('${project.id}')">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${project.id}')">
+                                <i class="fas fa-percentage"></i>
+                            </button>
+                            <button class="admin-btn btn-delete" onclick="deleteProject('${project.id}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Mettre à jour le tableau des commissions admin
+        function updateAdminCommissionsList() {
+            const tableBody = document.getElementById('adminCommissionsList');
+            if (!tableBody) return;
+            
+            tableBody.innerHTML = '';
+            
+            commissions.forEach(commission => {
+                const project = projects.find(p => p.id == commission.project_id);
+                if (!project) return;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${project.name}</td>
+                    <td>${commission.commission_rate || commissionSettings.defaultRate}%</td>
+                    <td>${formatCFA(commission.commission_amount || (project.collected * (commission.commission_rate || commissionSettings.defaultRate) / 100))}</td>
+                    <td>${formatCFA(project.collected)}</td>
+                    <td>
+                        <span class="status-badge ${commission.status === 'active' ? 'status-active' : commission.status === 'paid' ? 'status-completed' : 'status-pending'}">
+                            ${commission.status === 'active' ? 'Active' : commission.status === 'paid' ? 'Payée' : 'En attente'}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="admin-actions">
+                            <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${commission.project_id}')">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="admin-btn btn-validate" onclick="markCommissionAsPaid('${commission.id}')">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button class="admin-btn btn-delete" onclick="deleteCommission('${commission.id}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        async function markCommissionAsPaid(commissionId) {
+            try {
+                const { error } = await window.supabaseClient
+                    .from('commissions')
+                    .update({ status: 'paid', paid_at: new Date().toISOString() })
+                    .eq('id', commissionId);
+                
+                if (error) throw error;
+                
+                showNotification('Commission marquée comme payée');
+                await loadCommissions();
+                updateAdminCommissionsList();
+                
+            } catch (error) {
+                console.error('❌ Erreur mise à jour commission:', error);
+                showNotification('Erreur lors de la mise à jour de la commission: ' + error.message, 'error');
+            }
+        }
+
+        // Mettre à jour le tableau des transactions en attente admin
+        function updateAdminPendingTransactions() {
+            const tableBody = document.getElementById('adminPendingTransactions');
+            if (!tableBody) return;
+            
+            tableBody.innerHTML = '';
+            
+            if (pendingTransactions.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucune transaction en attente</td></tr>';
+                return;
+            }
+            
+            pendingTransactions.forEach(transaction => {
+                const user = users.find(u => u.id === transaction.member_id);
+                const project = transaction.project_id ? projects.find(p => p.id == transaction.project_id) : null;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${user ? user.name : 'Utilisateur inconnu'}</td>
+                    <td>
+                        <span class="status-badge ${transaction.type === 'deposit' ? 'status-cash' : 'status-active'}">
+                            ${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}
+                        </span>
+                    </td>
+                    <td>${formatCFA(transaction.amount)}</td>
+                    <td>${transaction.payment_method}</td>
+                    <td>${project ? project.name : 'N/A'}</td>
+                    <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <div class="admin-actions">
+                            <button class="admin-btn btn-validate" onclick="validateTransaction('${transaction.id}')">
+                                <i class="fas fa-check"></i> Valider
+                            </button>
+                            <button class="admin-btn btn-delete" onclick="rejectTransaction('${transaction.id}')">
+                                <i class="fas fa-times"></i> Refuser
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Mettre à jour le tableau des investissements récents admin
+        function updateAdminInvestmentsList() {
+            const tableBody = document.getElementById('adminInvestmentsList');
+            if (!tableBody) return;
+            
+            tableBody.innerHTML = '';
+            
+            // Trier les contributions par date (les plus récentes en premier)
+            const recentContributions = [...contributions]
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                .slice(0, 20);
+            
+            recentContributions.forEach(contribution => {
+                const user = users.find(u => u.id === contribution.member_id);
+                const project = projects.find(p => p.id == contribution.project_id);
+                
+                if (!user || !project) return;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${user.name || user.email}</td>
+                    <td>${project.name}</td>
+                    <td>${formatCFA(contribution.amount)}</td>
+                    <td>${contribution.payment_method}</td>
+                    <td>
+                        <span class="status-badge ${contribution.status === 'completed' ? 'status-active' : 'status-pending'}">
+                            ${contribution.status === 'completed' ? 'Completé' : 'En attente'}
+                        </span>
+                    </td>
+                    <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <div class="admin-actions">
+                            ${contribution.status !== 'completed' ? `
+                            <button class="admin-btn btn-validate" onclick="validatePayment('${contribution.id}')">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            ` : ''}
+                            <button class="admin-btn btn-delete" onclick="deleteContribution('${contribution.id}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Mettre à jour le dashboard membre
+        async function updateMemberDashboard() {
+            if (!currentUser) return;
+            
+            // Récupérer les données du membre
+            const memberData = await getOrCreateMember(
+                currentUser.email,
+                currentUser.user_metadata?.name,
+                currentUser.user_metadata?.phone
+            );
+            
+            if (!memberData) return;
+            
+            // Mettre à jour les statistiques
+            document.getElementById('memberWelcomeMessage').textContent = `Bonjour ${memberData.name || memberData.email.split('@')[0]}, bienvenue dans votre espace investisseur`;
+            document.getElementById('memberBalance').textContent = formatCFA(memberData.balance || 0);
+            document.getElementById('totalInvested').textContent = formatCFA(memberData.total_invested || 0);
+            document.getElementById('availableBalance').textContent = formatCFA(memberData.balance || 0);
+            
+            // Calculer les gains estimés
+            const memberContributions = contributions.filter(c => c.member_id === memberData.id);
+            const expectedReturn = memberContributions.reduce((sum, contribution) => {
+                const project = projects.find(p => p.id == contribution.project_id);
+                if (project && contribution.status === 'completed') {
+                    const annualReturn = contribution.amount * (project.return_rate || 12) / 100;
+                    const projectDuration = project.days_left || 24;
+                    const monthlyReturn = annualReturn / 12;
+                    return sum + (monthlyReturn * projectDuration);
+                }
+                return sum;
+            }, 0);
+            
+            document.getElementById('expectedReturn').textContent = formatCFA(expectedReturn);
+            
+            // Compter les projets actifs
+            const activeProjects = new Set();
+            memberContributions.forEach(contribution => {
+                if (contribution.status === 'completed') {
+                    activeProjects.add(contribution.project_id);
+                }
+            });
+            document.getElementById('activeProjects').textContent = activeProjects.size;
+            
+            // Mettre à jour le tableau des investissements
+            updateMemberInvestmentsTable(memberData.id);
+            
+            // Mettre à jour le tableau des transactions en attente
+            updateMemberPendingTransactions(memberData.id);
+        }
+
+        function updateMemberInvestmentsTable(memberId) {
+            const tableBody = document.getElementById('memberInvestments');
+            if (!tableBody) return;
+            
+            tableBody.innerHTML = '';
+            
+            const memberContributions = contributions.filter(c => c.member_id === memberId);
+            
+            if (memberContributions.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucun investissement pour le moment</td></tr>';
+                return;
+            }
+            
+            memberContributions.forEach(contribution => {
+                const project = projects.find(p => p.id == contribution.project_id);
+                if (!project) return;
+                
+                const expectedReturn = contribution.amount * (project.return_rate || 12) / 100;
+                const projectDuration = project.days_left || 24;
+                const totalExpectedReturn = (expectedReturn / 12) * projectDuration;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${project.name}</td>
+                    <td>${formatCFA(contribution.amount)}</td>
+                    <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
+                    <td>${contribution.payment_method}</td>
+                    <td>
+                        <span class="status-badge ${contribution.status === 'completed' ? 'status-active' : 'status-pending'}">
+                            ${contribution.status === 'completed' ? 'Completé' : 'En attente'}
+                        </span>
+                    </td>
+                    <td>${formatCFA(totalExpectedReturn)}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function updateMemberPendingTransactions(memberId) {
+            const tableBody = document.getElementById('memberPendingTransactions');
+            if (!tableBody) return;
+            
+            tableBody.innerHTML = '';
+            
+            const memberPending = pendingTransactions.filter(t => t.member_id === memberId);
+            
+            if (memberPending.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Aucune transaction en attente</td></tr>';
+                return;
+            }
+            
+            memberPending.forEach(transaction => {
+                const project = transaction.project_id ? projects.find(p => p.id == transaction.project_id) : null;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
+                    <td>${formatCFA(transaction.amount)}</td>
+                    <td>${transaction.payment_method}</td>
+                    <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <span class="status-badge status-pending">
+                            En attente
+                        </span>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Charger la liste KYC pour l'admin
+        async function loadAdminKYCList() {
+            const tableBody = document.getElementById('adminKYCList');
+            if (!tableBody) return;
+            
+            tableBody.innerHTML = '';
+            
+            const loadingIndicator = document.getElementById('kycLoading');
+            if (loadingIndicator) {
+                loadingIndicator.classList.add('active');
+            }
+            
+            // Récupérer les utilisateurs avec leurs données KYC
+            const kycList = [];
+            
+            for (const kyc of kycVerifications) {
+                const user = users.find(u => u.id === kyc.user_id);
+                if (user) {
+                    kycList.push({
+                        user: user,
+                        kyc: kyc
+                    });
+                }
+            }
+            
+            kycList.forEach(item => {
+                const kycStatusText = item.kyc.status === 'not_submitted' ? 'Non soumis' : 
+                                     item.kyc.status === 'pending' ? 'En attente' :
+                                     item.kyc.status === 'verified' ? 'Vérifié' : 'Rejeté';
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.user.name || item.user.email}</td>
+                    <td>${item.user.email}</td>
+                    <td>${item.kyc.document_type}</td>
+                    <td>
+                        <span class="kyc-status kyc-${item.kyc.status.replace('_', '-')}">
+                            ${kycStatusText}
+                        </span>
+                    </td>
+                    <td>${new Date(item.kyc.submitted_at).toLocaleDateString()}</td>
+                    <td>
+                        <div class="admin-actions">
+                            <button class="admin-btn btn-edit" onclick="viewKYCVerification('${item.kyc.id}')">
+                                <i class="fas fa-eye"></i> Voir
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+            
+            if (loadingIndicator) {
+                loadingIndicator.classList.remove('active');
+            }
         }
 
         function viewKYCVerification(kycId) {
-            // À implémenter
-            showNotification('Fonctionnalité à implémenter', 'warning');
+            const kyc = kycVerifications.find(k => k.id === kycId);
+            if (!kyc) return;
+            
+            const user = users.find(u => u.id === kyc.user_id);
+            if (!user) return;
+            
+            currentKYCUserId = kyc.user_id;
+            
+            // Mettre à jour les informations utilisateur
+            document.getElementById('kycUserInfo').innerHTML = `
+                <div class="detail-item">
+                    <div class="detail-label">Nom</div>
+                    <div class="detail-value">${user.name || 'Non renseigné'}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-value">${user.email}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Date soumission</div>
+                    <div class="detail-value">${new Date(kyc.submitted_at).toLocaleDateString()}</div>
+                </div>
+            `;
+            
+            // Mettre à jour les informations du document
+            const documentTypeText = kyc.document_type === 'passport' ? 'Passeport' :
+                                   kyc.document_type === 'nni' ? 'Carte d\'identité nationale (NNI)' :
+                                   'Permis de conduire';
+            
+            document.getElementById('kycDocumentInfo').innerHTML = `
+                <div class="detail-item">
+                    <div class="detail-label">Type de document</div>
+                    <div class="detail-value">${documentTypeText}</div>
+                </div>
+                ${kyc.documents && kyc.documents.length > 0 ? `
+                <div style="margin-top: 15px;">
+                    <button class="btn btn-outline" onclick="previewKYCDocument('${kyc.id}')">
+                        <i class="fas fa-eye"></i> Voir le document
+                    </button>
+                </div>
+                ` : '<p>Aucun document disponible</p>'}
+            `;
+            
+            // Afficher/masquer les boutons selon le statut
+            const approveBtn = document.getElementById('approveKYCBtn');
+            const rejectBtn = document.getElementById('rejectKYCBtn');
+            const requestInfoBtn = document.getElementById('requestInfoBtn');
+            
+            if (kyc.status === 'pending') {
+                approveBtn.style.display = 'inline-block';
+                rejectBtn.style.display = 'inline-block';
+                requestInfoBtn.style.display = 'inline-block';
+            } else {
+                approveBtn.style.display = 'none';
+                rejectBtn.style.display = 'none';
+                requestInfoBtn.style.display = 'none';
+            }
+            
+            // Afficher la section des détails
+            document.getElementById('kycDetailsContainer').style.display = 'block';
         }
 
-        function approveKYC() {
-            // À implémenter
-            showNotification('Fonctionnalité à implémenter', 'warning');
+        function previewKYCDocument(kycId) {
+            const kyc = kycVerifications.find(k => k.id === kycId);
+            if (!kyc || !kyc.documents || kyc.documents.length === 0) return;
+            
+            const document = kyc.documents[0];
+            const documentTypeText = kyc.document_type === 'passport' ? 'Passeport' :
+                                   kyc.document_type === 'nni' ? 'Carte d\'identité nationale (NNI)' :
+                                   'Permis de conduire';
+            
+            document.getElementById('documentPreviewTitle').textContent = `${documentTypeText} - ${document.file_name}`;
+            document.getElementById('documentPreviewImage').src = document.file_url;
+            document.getElementById('documentDownloadLink').href = document.file_url;
+            
+            openModal('documentPreviewModal');
         }
 
-        function rejectKYC() {
-            // À implémenter
-            showNotification('Fonctionnalité à implémenter', 'warning');
+        async function approveKYC() {
+            if (!currentKYCUserId) return;
+            
+            try {
+                const { error } = await window.supabaseClient
+                    .from('kyc_verifications')
+                    .update({ 
+                        status: 'verified',
+                        updated_at: new Date().toISOString(),
+                        reviewed_by: currentUser.email,
+                        review_notes: document.getElementById('kycAdminNote').value
+                    })
+                    .eq('user_id', currentKYCUserId);
+                
+                if (error) throw error;
+                
+                showNotification('KYC approuvé avec succès');
+                await loadKYCVerifications();
+                loadAdminKYCList();
+                
+                // Masquer la section des détails
+                document.getElementById('kycDetailsContainer').style.display = 'none';
+                
+            } catch (error) {
+                console.error('❌ Erreur approbation KYC:', error);
+                showNotification('Erreur lors de l\'approbation: ' + error.message, 'error');
+            }
         }
 
-        function requestMoreInfoKYC() {
-            // À implémenter
-            showNotification('Fonctionnalité à implémenter', 'warning');
+        async function rejectKYC() {
+            if (!currentKYCUserId) return;
+            
+            try {
+                const { error } = await window.supabaseClient
+                    .from('kyc_verifications')
+                    .update({ 
+                        status: 'rejected',
+                        updated_at: new Date().toISOString(),
+                        reviewed_by: currentUser.email,
+                        review_notes: document.getElementById('kycAdminNote').value
+                    })
+                    .eq('user_id', currentKYCUserId);
+                
+                if (error) throw error;
+                
+                showNotification('KYC rejeté');
+                await loadKYCVerifications();
+                loadAdminKYCList();
+                
+                // Masquer la section des détails
+                document.getElementById('kycDetailsContainer').style.display = 'none';
+                
+            } catch (error) {
+                console.error('❌ Erreur rejet KYC:', error);
+                showNotification('Erreur lors du rejet: ' + error.message, 'error');
+            }
         }
+
+        async function requestMoreInfoKYC() {
+            if (!currentKYCUserId) return;
+            
+            const note = document.getElementById('kycAdminNote').value;
+            if (!note) {
+                showNotification('Veuillez ajouter un commentaire pour demander plus d\'informations', 'error');
+                return;
+            }
+            
+            showNotification('Demande d\'informations supplémentaires envoyée');
+            // Note: Dans une implémentation réelle, vous enverriez un email à l'utilisateur
+        }
+
+        // Gestion du menu mobile
+        function setupMobileMenu() {
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+            const navLinks = document.getElementById('navLinks');
+            const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
+            
+            if (mobileMenuBtn && navLinks) {
+                mobileMenuBtn.addEventListener('click', function() {
+                    navLinks.classList.toggle('active');
+                    mobileMenuBtn.classList.toggle('active');
+                    mobileMenuOverlay.classList.toggle('active');
+                    document.body.style.overflow = navLinks.classList.contains('active') ? 'hidden' : '';
+                });
+                
+                mobileMenuOverlay.addEventListener('click', function() {
+                    navLinks.classList.remove('active');
+                    mobileMenuBtn.classList.remove('active');
+                    mobileMenuOverlay.classList.remove('active');
+                    document.body.style.overflow = '';
+                });
+            }
+        }
+
+        function closeMobileMenu() {
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+            const navLinks = document.getElementById('navLinks');
+            const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
+            
+            if (navLinks) {
+                navLinks.classList.remove('active');
+            }
+            if (mobileMenuBtn) {
+                mobileMenuBtn.classList.remove('active');
+            }
+            if (mobileMenuOverlay) {
+                mobileMenuOverlay.classList.remove('active');
+            }
+            document.body.style.overflow = '';
+        }
+
+        // Configuration des écouteurs d'événements
+        function setupEventListeners() {
+            // Connexion
+            document.getElementById('loginForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const email = document.getElementById('login-email').value;
+                const password = document.getElementById('login-password').value;
+                login(email, password);
+            });
+
+            // Inscription
+            document.getElementById('registrationForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const name = document.getElementById('reg-name').value;
+                const email = document.getElementById('reg-email').value;
+                const phone = document.getElementById('reg-phone').value;
+                const password = document.getElementById('reg-password').value;
+                const confirmPassword = document.getElementById('reg-confirm-password').value;
+                
+                if (password !== confirmPassword) {
+                    showNotification('Les mots de passe ne correspondent pas', 'error');
+                    return;
+                }
+                
+                register(name, email, password, phone);
+            });
+
+            // Mot de passe oublié
+            document.getElementById('forgotPasswordForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                processForgotPassword();
+            });
+
+            // Ajout de fonds
+            document.getElementById('addFundsForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                processAddFunds();
+            });
+
+            // Simulateur
+            setupSimulator();
+
+            // Configuration de l'upload d'image
+            setupImageUpload();
+
+            // Configuration de l'upload de document KYC
+            initKYCDocumentUpload();
+
+            // Mise à jour des affichages de montant
+            document.getElementById('fundsAmount')?.addEventListener('input', updateFundsAmountDisplay);
+            document.getElementById('investmentAmount')?.addEventListener('input', updateAmountDisplay);
+
+            // Recherche d'utilisateurs
+            document.getElementById('userSearch')?.addEventListener('input', function(e) {
+                userSearchTerm = e.target.value;
+                loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            document.getElementById('userRoleFilter')?.addEventListener('change', function(e) {
+                userRoleFilter = e.target.value;
+                loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            document.getElementById('userStatusFilter')?.addEventListener('change', function(e) {
+                userStatusFilter = e.target.value;
+                loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            document.getElementById('userKYCStatusFilter')?.addEventListener('change', function(e) {
+                userKYCStatusFilter = e.target.value;
+                loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            document.getElementById('userPageSize')?.addEventListener('change', function(e) {
+                userPageSize = parseInt(e.target.value);
+                loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            // Période d'export personnalisée
+            document.getElementById('exportPeriod')?.addEventListener('change', function(e) {
+                const customContainer = document.getElementById('customPeriodContainer');
+                if (e.target.value === 'custom') {
+                    customContainer.style.display = 'block';
+                } else {
+                    customContainer.style.display = 'none';
+                }
+            });
+
+            // Recherche KYC
+            document.getElementById('kycUserSearch')?.addEventListener('input', function(e) {
+                loadAdminKYCList();
+            });
+
+            document.getElementById('kycStatusFilter')?.addEventListener('change', function(e) {
+                loadAdminKYCList();
+            });
+        }
+
+        // Fonction de notification
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            const notificationMessage = document.getElementById('notification-message');
+            const icon = notification.querySelector('i');
+            
+            if (!notification || !notificationMessage) return;
+            
+            notificationMessage.textContent = message;
+            notification.className = 'notification ' + type;
+            
+            // Changer l'icône selon le type
+            if (type === 'error') {
+                icon.className = 'fas fa-exclamation-circle';
+            } else if (type === 'warning') {
+                icon.className = 'fas fa-exclamation-triangle';
+            } else {
+                icon.className = 'fas fa-check-circle';
+            }
+            
+            notification.style.display = 'flex';
+            
+            // Masquer automatiquement après 5 secondes
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 5000);
+        }
+
+        // Fermer la notification en cliquant
+        document.getElementById('notification')?.addEventListener('click', function() {
+            this.style.display = 'none';
+        });
+
+        // Afficher la section d'accueil par défaut
+        showSection('home');
     </script>
 </body>
 </html>
