@@ -4778,39 +4778,36 @@ async function submitKYCDocument() {
         progressPercentage.textContent = '10%';
 
         // Vérifier si le membre existe déjà
-        let { data: memberData, error: searchError } = await window.supabaseClient
-            .from('members')
-            .select('*')
-            .eq('id', user.id)   // ✅ alignement avec auth.uid()
-            .maybeSingle();
+let { data: memberData, error } = await window.supabaseClient
+    .from('members')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle(); // ✅ retourne null si pas trouvé
 
-        if (searchError || !memberData) {
-            progressText.textContent = 'Création de votre profil...';
-            progressBar.style.width = '40%';
-            progressPercentage.textContent = '40%';
+if (!memberData) {
+    // Créer le membre seulement s'il n'existe pas
+    const { data: newMember, error: createError } = await window.supabaseClient
+        .from('members')
+        .insert([{
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.name || user.email.split('@')[0],
+            phone: user.user_metadata?.phone || '',
+            role: 'investor',
+            status: 'active',
+            balance: 0,
+            total_invested: 0,
+            created_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
 
-            const { data: newMember, error: createError } = await window.supabaseClient
-                .from('members')
-                .insert([{
-                    id: user.id,
-                    email: user.email,
-                    name: user.user_metadata?.name || user.email.split('@')[0],
-                    phone: user.user_metadata?.phone || '',
-                    role: 'investor',
-                    status: 'active',
-                    balance: 0,
-                    total_invested: 0,
-                    created_at: new Date().toISOString()
-                }])
-                .select()
-                .single();
-
-            if (createError) {
-                console.error('❌ Erreur création membre:', createError);
-                throw new Error('Impossible de créer votre profil');
-            }
-            memberData = newMember;
-        }
+    if (createError) {
+        console.error('❌ Erreur création membre:', createError);
+        throw new Error('Impossible de créer votre profil');
+    }
+    memberData = newMember;
+}
 
         console.log('✅ Membre trouvé/créé:', memberData.id);
 
