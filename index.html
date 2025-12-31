@@ -4886,35 +4886,38 @@
                 };
 
                 // ⭐⭐ CORRECTION : Utiliser upsert avec onConflict pour gérer les mises à jour
-                const { error: kycError } = await window.supabaseClient
-                    .from('kyc_verifications')
-                    .upsert(kycData, {
-                        onConflict: 'user_id'
-                    });
+                const { data, error: kycError } = await window.supabaseClient
+    .from('kyc_verifications')
+    .insert([{
+        ...kycData,
+        user_id: (await window.supabaseClient.auth.getUser()).data.user.id, // ✅ aligner avec auth.uid()
+        status: 'pending',
+        submitted_at: new Date().toISOString()
+    }]);
 
-                if (kycError) {
-                    console.error('❌ Erreur enregistrement KYC:', kycError);
-                    
-                    // Essayer de supprimer le fichier uploadé en cas d'erreur
-                    try {
-                        await window.supabaseClient.storage
-                            .from('kyc_documents')
-                            .remove([filePath]);
-                    } catch (cleanupError) {
-                        console.warn('Avertissement nettoyage fichier:', cleanupError);
-                    }
-                    
-                    throw kycError;
-                }
+if (kycError) {
+    console.error('❌ Erreur enregistrement KYC:', kycError);
+    
+    // Essayer de supprimer le fichier uploadé en cas d'erreur
+    try {
+        await window.supabaseClient.storage
+            .from('kyc_documents')
+            .remove([filePath]);
+    } catch (cleanupError) {
+        console.warn('Avertissement nettoyage fichier:', cleanupError);
+    }
+    
+    throw kycError;
+}
 
-                progressBar.style.width = '100%';
-                progressPercentage.textContent = '100%';
-                progressText.textContent = 'Document soumis avec succès !';
+progressBar.style.width = '100%';
+progressPercentage.textContent = '100%';
+progressText.textContent = 'Document soumis avec succès !';
 
-                // 4. Mettre à jour le statut local
-                currentKYCStatus = 'pending';
-                await loadUserKYCStatus();
-                updateKYCStatusDisplay();
+// 4. Mettre à jour le statut local
+currentKYCStatus = 'pending';
+await loadUserKYCStatus();
+updateKYCStatusDisplay();
 
                 // 5. Afficher confirmation
                 setTimeout(() => {
