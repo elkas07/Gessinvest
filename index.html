@@ -6985,14 +6985,86 @@ async function loadAdminKYCList() {
         }
 
         // Configuration des événements
-        function setupEventListeners() {
-            // Login form
-            document.getElementById('loginForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const email = document.getElementById('login-email').value;
-                const password = document.getElementById('login-password').value;
-                login(email, password);
-            });
+function setupEventListeners() {
+    // Login form
+    document.getElementById('loginForm')?.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
+        login(email, password);
+    });
+
+    // Formulaire d'édition de projet
+    document.getElementById('editProjectForm')?.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        // Récupérer les valeurs du formulaire
+        const name = document.getElementById('edit-project-name').value;
+        const description = document.getElementById('edit-project-description').value;
+        const location = document.getElementById('edit-project-location').value;
+        const target = document.getElementById('edit-project-target').value;
+        const current = document.getElementById('edit-project-current').value;
+        const returnRate = document.getElementById('edit-project-return').value;
+        const duration = document.getElementById('edit-project-duration').value;
+        const status = document.getElementById('edit-project-status').value;
+
+        // Image sélectionnée
+        const file = document.getElementById('edit-project-image-upload').files[0];
+        let imageUrl = null;
+
+        if (file) {
+            // Upload vers Supabase Storage
+            const { data, error } = await window.supabaseClient.storage
+                .from('project-images') // ⚠️ remplace par le nom de ton bucket
+                .upload(`projects/${file.name}`, file, { upsert: true });
+
+            if (error) {
+                console.error('❌ Erreur upload image:', error);
+            } else {
+                // Générer l’URL publique
+                imageUrl = window.supabaseClient.storage
+                    .from('project-images')
+                    .getPublicUrl(`projects/${file.name}`).data.publicUrl;
+            }
+        }
+
+        // Mettre à jour le projet dans la table
+        const { error: updateError } = await window.supabaseClient
+            .from('projects')
+            .update({
+                name,
+                description,
+                location,
+                target,
+                current,
+                return_rate: returnRate,
+                duration,
+                status,
+                image_url: imageUrl
+            })
+            .eq('id', currentEditingProjectId); // ⚠️ tu dois avoir une variable qui stocke l’ID du projet en cours
+
+        if (updateError) {
+            console.error('❌ Erreur mise à jour projet:', updateError);
+        } else {
+            alert('✅ Projet mis à jour avec succès');
+            closeModal('editProjectModal');
+            loadProjects(); // recharge la liste des projets
+        }
+    });
+
+    // Aperçu de l’image
+    document.getElementById('edit-project-image-upload')?.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('edit-image-preview').src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+}
 
             // Registration form
             document.getElementById('registrationForm')?.addEventListener('submit', function(e) {
