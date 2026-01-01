@@ -6984,49 +6984,12 @@ async function loadAdminKYCList() {
             showNotification('Calendrier actualisé');
         }
 
-        // Configuration des événements
-        function setupEventListeners() {
-            // Login form
-            document.getElementById('loginForm')?.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const email = document.getElementById('login-email').value;
-                const password = document.getElementById('login-password').value;
-                login(email, password);
-            });
-
-            // --- DEBUT DU CODE AJOUTÉ POUR LE PROJET ---
-
-            // 1. Permettre de cliquer sur le carré pour choisir une image
-            const editContainer = document.getElementById('edit-image-upload-container');
-            if (editContainer) {
-                editContainer.addEventListener('click', () => {
-                    document.getElementById('edit-project-image-upload').click();
-                });
-            }
-
-            // 2. Afficher l'aperçu de l'image sélectionnée
-            const editFileInput = document.getElementById('edit-project-image-upload');
-            if (editFileInput) {
-                editFileInput.addEventListener('change', function(e) {
-                    const file = e.target.files[0];
-                    if (file) {
-                        const reader = new FileReader();
-                        reader.onload = function(event) {
-                            document.getElementById('edit-image-preview').src = event.target.result;
-                            document.getElementById('edit-image-preview').style.display = 'block';
-                        };
-                        reader.readAsDataURL(file);
-                    }
-                });
-            }
-
-            // 3. Gérer le bouton orange "Modifier le projet"
+        // 3. Gérer le bouton orange "Modifier le projet"
             const editProjectForm = document.getElementById('editProjectForm');
             if (editProjectForm) {
                 editProjectForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
-                    console.log('Enregistrement des modifications...');
-
+                    
                     if (!currentEditingProject) {
                         alert("Erreur: Aucun projet sélectionné");
                         return;
@@ -7036,38 +6999,41 @@ async function loadAdminKYCList() {
                     const imageFile = document.getElementById('edit-project-image-upload').files[0];
 
                     try {
-                        // Mise à jour des textes
+                        // On utilise 'collected' car c'est le nom dans votre base de données
+                        const updatedData = {
+                            name: document.getElementById('edit-project-name').value,
+                            description: document.getElementById('edit-project-description').value,
+                            location: document.getElementById('edit-project-location').value,
+                            target_amount: parseFloat(document.getElementById('edit-project-target').value),
+                            collected: parseFloat(document.getElementById('edit-project-current').value), // CORRIGÉ ICI
+                            expected_return: parseFloat(document.getElementById('edit-project-return').value),
+                            duration_months: parseInt(document.getElementById('edit-project-duration').value),
+                            status: document.getElementById('edit-project-status').value
+                        };
+
+                        // Étape 1 : Mise à jour des textes
                         const { error: updateError } = await window.supabaseClient
                             .from('projects')
-                            .update({
-                                name: document.getElementById('edit-project-name').value,
-                                description: document.getElementById('edit-project-description').value,
-                                location: document.getElementById('edit-project-location').value,
-                                target_amount: parseFloat(document.getElementById('edit-project-target').value),
-                                collected_amount: parseFloat(document.getElementById('edit-project-current').value),
-                                expected_return: parseFloat(document.getElementById('edit-project-return').value),
-                                duration_months: parseInt(document.getElementById('edit-project-duration').value),
-                                status: document.getElementById('edit-project-status').value
-                            })
+                            .update(updatedData)
                             .eq('id', projectId);
 
                         if (updateError) throw updateError;
 
-                        // Mise à jour de l'image si une nouvelle est choisie
+                        // Étape 2 : Mise à jour de l'image seulement si une nouvelle est choisie
                         if (imageFile) {
+                            console.log('Envoi de la nouvelle image...');
                             await saveProjectImage(projectId, imageFile);
                         }
 
                         closeModal('editProjectModal');
                         showNotification('Projet mis à jour avec succès !', 'success');
                         
-                        // Rafraîchir l'affichage
                         await loadProjects();
                         updateProjectsDisplay();
 
                     } catch (err) {
-                        console.error('Erreur modification:', err);
-                        alert('Erreur: ' + err.message);
+                        console.error('Erreur lors de la modification:', err);
+                        alert('Erreur base de données : ' + err.message);
                     }
                 });
             }
