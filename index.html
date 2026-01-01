@@ -6994,6 +6994,84 @@ async function loadAdminKYCList() {
                 login(email, password);
             });
 
+            // --- DEBUT DU CODE AJOUTÉ POUR LE PROJET ---
+
+            // 1. Permettre de cliquer sur le carré pour choisir une image
+            const editContainer = document.getElementById('edit-image-upload-container');
+            if (editContainer) {
+                editContainer.addEventListener('click', () => {
+                    document.getElementById('edit-project-image-upload').click();
+                });
+            }
+
+            // 2. Afficher l'aperçu de l'image sélectionnée
+            const editFileInput = document.getElementById('edit-project-image-upload');
+            if (editFileInput) {
+                editFileInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            document.getElementById('edit-image-preview').src = event.target.result;
+                            document.getElementById('edit-image-preview').style.display = 'block';
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+            }
+
+            // 3. Gérer le bouton orange "Modifier le projet"
+            const editProjectForm = document.getElementById('editProjectForm');
+            if (editProjectForm) {
+                editProjectForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    console.log('Enregistrement des modifications...');
+
+                    if (!currentEditingProject) {
+                        alert("Erreur: Aucun projet sélectionné");
+                        return;
+                    }
+
+                    const projectId = currentEditingProject.id;
+                    const imageFile = document.getElementById('edit-project-image-upload').files[0];
+
+                    try {
+                        // Mise à jour des textes
+                        const { error: updateError } = await window.supabaseClient
+                            .from('projects')
+                            .update({
+                                name: document.getElementById('edit-project-name').value,
+                                description: document.getElementById('edit-project-description').value,
+                                location: document.getElementById('edit-project-location').value,
+                                target_amount: parseFloat(document.getElementById('edit-project-target').value),
+                                collected_amount: parseFloat(document.getElementById('edit-project-current').value),
+                                expected_return: parseFloat(document.getElementById('edit-project-return').value),
+                                duration_months: parseInt(document.getElementById('edit-project-duration').value),
+                                status: document.getElementById('edit-project-status').value
+                            })
+                            .eq('id', projectId);
+
+                        if (updateError) throw updateError;
+
+                        // Mise à jour de l'image si une nouvelle est choisie
+                        if (imageFile) {
+                            await saveProjectImage(projectId, imageFile);
+                        }
+
+                        closeModal('editProjectModal');
+                        showNotification('Projet mis à jour avec succès !', 'success');
+                        
+                        // Rafraîchir l'affichage
+                        await loadProjects();
+                        updateProjectsDisplay();
+
+                    } catch (err) {
+                        console.error('Erreur modification:', err);
+                        alert('Erreur: ' + err.message);
+                    }
+                });
+            }
+
             // Registration form
             document.getElementById('registrationForm')?.addEventListener('submit', function(e) {
                 e.preventDefault();
