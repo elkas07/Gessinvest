@@ -5903,16 +5903,88 @@
         }
 
         // ⭐⭐ CORRECTION MAJEURE ⭐⭐ - Fonction validateTransaction corrigée
-        async function validateTransaction(transactionId) {
-            // CORRECTION : Vérifier window.supabaseClient
-            if (!isSupabaseConnected || !window.supabaseClient) {
-                showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
-                return;
-            }
+async function validateTransaction(transactionId) {
+    // CORRECTION : Vérifier window.supabaseClient
+    if (!isSupabaseConnected || !window.supabaseClient) {
+        showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
+        return;
+    }
 
-            try {
-                console.log('✅ Validation de la transaction:', transactionId);
-                
+    try {
+        console.log('✅ Validation de la transaction:', transactionId);
+
+        // 🔍 Récupérer la transaction depuis Supabase
+        const { data: transaction, error: fetchError } = await window.supabaseClient
+            .from("transactions")
+            .select("*")
+            .eq("id", transactionId)
+            .single();
+
+        if (fetchError || !transaction) {
+            console.error("❌ Erreur récupération transaction:", fetchError);
+            showNotification("Erreur lors de la récupération de la transaction", "error");
+            return;
+        }
+
+        console.log("transaction.member_id brut:", transaction.member_id);
+
+        // Nettoyage éventuel de l'ID membre
+        const memberId = transaction.member_id?.trim();
+        console.log("transaction.member_id nettoyé:", memberId);
+
+        // ✅ Vérifier que le membre existe
+        const { data: member, error: memberError } = await window.supabaseClient
+            .from("members")
+            .select("*")
+            .eq("id", memberId)
+            .single();
+
+        if (memberError || !member) {
+            console.error("❌ Erreur récupération membre:", memberError);
+            showNotification("Membre introuvable pour cette transaction", "error");
+            return;
+        }
+
+        console.log("✅ Membre trouvé:", member);
+
+        // ✅ Insérer la contribution avec payment_method obligatoire
+        const { error: insertError } = await window.supabaseClient
+            .from("contributions")
+            .insert({
+                member_id: memberId,
+                project_id: transaction.project_id,
+                amount: transaction.amount,
+                created_at: new Date().toISOString(),
+                payment_method: "mobile_money" // ⚠️ À adapter selon ton workflow (ex: "bank_transfer", "cash")
+            });
+
+        if (insertError) {
+            console.error("❌ Erreur validation transaction:", insertError);
+            showNotification("Erreur lors de l'enregistrement de la contribution", "error");
+            return;
+        }
+
+        // ✅ Mettre à jour le statut de la transaction
+        const { error: updateError } = await window.supabaseClient
+            .from("transactions")
+            .update({ status: "validated" })
+            .eq("id", transactionId);
+
+        if (updateError) {
+            console.error("❌ Erreur mise à jour transaction:", updateError);
+            showNotification("Erreur lors de la mise à jour de la transaction", "error");
+            return;
+        }
+
+        console.log("✅ Transaction validée avec succès:", transactionId);
+        showNotification("Transaction validée avec succès", "success");
+
+    } catch (err) {
+        console.error("❌ Exception validateTransaction:", err);
+        showNotification("Erreur inattendue lors de la validation", "error");
+    }
+}
+              
                 // 1. Récupérer la transaction avec vérification du statut 'pending'
                 const { data: transaction, error: transactionError } = await window.supabaseClient
                     .from('transactions')
