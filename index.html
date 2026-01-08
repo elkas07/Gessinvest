@@ -5620,70 +5620,30 @@
             }
         }
 
-        // 1. On place le verrou à l'extérieur de la fonction pour qu'il soit partagé
-let isProcessingValidation = false;
 
-async function validateTransaction(transactionId) {
-    // 🛡️ SÉCURITÉ 1 : Empêcher le double-clic ou la double exécution
-    if (isProcessingValidation) {
-        console.warn('⏳ Validation déjà en cours... On ignore ce clic.');
-        return;
-    }
+        async function validateTransaction(transactionId) {
+            // CORRECTION : Vérifier window.supabaseClient
+            if (!isSupabaseConnected || !window.supabaseClient) {
+                showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
+                return;
+            }
 
-    // 🛡️ SÉCURITÉ 2 : Vérifier la connexion Supabase
-    if (!isSupabaseConnected || !window.supabaseClient) {
-        showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
-        return;
-    }
+            try {
+                console.log('✅ Validation de la transaction:', transactionId);
+                
+                // 1. Récupérer la transaction avec vérification du statut 'pending'
+                const { data: transaction, error: transactionError } = await window.supabaseClient
+                    .from('transactions')
+                    .select('*')
+                    .eq('id', transactionId)
+                    .eq('status', 'pending') // ⭐ VÉRIFIER QU'ELLE EST BIEN EN PENDING ⭐
+                    .single();
 
-    try {
-        isProcessingValidation = true; // 🔒 ON VERROUILLE
-        console.log('🚀 Tentative de validation unique pour:', transactionId);
-        
-        // 1. Récupérer la transaction avec vérification stricte du statut 'pending'
-        const { data: transaction, error: transactionError } = await window.supabaseClient
-            .from('transactions')
-            .select('*')
-            .eq('id', transactionId)
-            .eq('status', 'pending') 
-            .single();
-
-        if (transactionError || !transaction) {
-            console.error('❌ Transaction non trouvée ou déjà traitée:', transactionError);
-            showNotification('Cette transaction a déjà été traitée ou n\'existe pas.', 'error');
-            isProcessingValidation = false; // 🔓 On libère avant de sortir
-            return;
-        }
-
-        console.log('💰 Montant à valider:', transaction.amount);
-
-        // 2. Mettre à jour le statut dans Supabase (C'est cette action qui valide l'argent)
-        const { error: updateError } = await window.supabaseClient
-            .from('transactions')
-            .update({ 
-                status: 'completed',
-                validated_at: new Date().toISOString()
-            })
-            .eq('id', transactionId);
-
-        if (updateError) throw updateError;
-
-        console.log('✅ Base de données mise à jour. Rafraîchissement du dashboard...');
-
-        // 3. Recharger les données pour que le dashboard affiche le bon montant
-        // Cela appelle ta fonction "🎯 DASHBOARD UNIQUE"
-        await refreshAdminDashboard();
-
-        showNotification('Transaction validée avec succès !');
-
-    } catch (error) {
-        console.error('❌ Erreur critique lors de la validation:', error);
-        showNotification('Erreur technique lors de la validation', 'error');
-    } finally {
-        isProcessingValidation = false; // 🔓 ON LIBÈRE LE VERROU quoi qu'il arrive
-        console.log('🏁 Fin du processus de validation.');
-    }
-}
+                if (transactionError) {
+                    console.error('❌ Transaction non trouvée ou déjà traitée:', transactionError);
+                    showNotification('Cette transaction a déjà été traitée ou n\'existe pas.', 'error');
+                    return;
+                }
 
                 // ⭐⭐ CORRECTION CRITIQUE - Nettoyer l'ID du membre ⭐⭐
                 console.log('transaction.member_id brut:', transaction.member_id);
