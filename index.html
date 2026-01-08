@@ -6471,35 +6471,50 @@
 
         // ⭐ VERSION CORRIGÉE : Filtre les doublons et sécurise l'affichage ⭐
 
+// =========================================================
+// BLOC ADMIN COMPLET : DASHBOARD + LISTES (CORRIGÉ)
+// =========================================================
+
 function updateAdminDashboard() {
-    console.log("🔄 Actualisation du dashboard admin...");
+    console.log("🎯 DASHBOARD UNIQUE - Mise à jour en cours...");
     
-    // 1. SÉCURITÉ ANTI-DOUBLONS : On ne garde que les contributions uniques par ID
+    // 1. SÉCURITÉ ANTI-DOUBLONS : On nettoie la liste des contributions
     const uniqueContributions = Array.from(new Map(contributions.map(c => [c.id, c])).values());
 
-    // Mettre à jour les statistiques de base
-    document.getElementById('adminTotalUsers').textContent = users.length;
-    document.getElementById('adminTotalProjects').textContent = projects.length;
+    // 2. MISE À JOUR DES STATISTIQUES
+    if (document.getElementById('adminTotalUsers')) {
+        document.getElementById('adminTotalUsers').textContent = users.length;
+    }
+    if (document.getElementById('adminTotalProjects')) {
+        document.getElementById('adminTotalProjects').textContent = projects.length;
+    }
     
-    // 2. CALCUL SÉCURISÉ : Somme basée sur la liste nettoyée
+    // Calcul de la somme réelle (sans doublons)
     const totalInvestments = uniqueContributions.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
-    document.getElementById('adminTotalInvestments').textContent = formatCFA(totalInvestments);
+    if (document.getElementById('adminTotalInvestments')) {
+        document.getElementById('adminTotalInvestments').textContent = formatCFA(totalInvestments);
+    }
     
-    // 3. Transactions en attente
-    document.getElementById('adminPendingPayments').textContent = pendingTransactions.length;
+    if (document.getElementById('adminPendingPayments')) {
+        document.getElementById('adminPendingPayments').textContent = pendingTransactions.length;
+    }
     
-    // 4. KYC en attente
     const pendingKYC = kycVerifications.filter(k => k.status === 'pending').length;
-    document.getElementById('adminPendingKYC').textContent = pendingKYC;
+    if (document.getElementById('adminPendingKYC')) {
+        document.getElementById('adminPendingKYC').textContent = pendingKYC;
+    }
     
-    // Mettre à jour les graphiques et listes
-    updateChartsWithRealData();
+    // 3. MISE À JOUR DES GRAPHES ET LISTES
+    if (typeof updateChartsWithRealData === "function") updateChartsWithRealData();
+    
     updateAdminPendingTransactions();
     updateAdminProjectsList();
     updateAdminCommissionsList();
     updateAdminUsersList();
-    updateAdminInvestmentsList(); // Cette fonction utilisera aussi la liste nettoyée
-    updatePaymentCalendar();
+    updateAdminInvestmentsList();
+    if (typeof updatePaymentCalendar === "function") updatePaymentCalendar();
+    
+    // Mettre à jour la pagination
     updatePagination();
 }
 
@@ -6538,6 +6553,138 @@ function updateAdminPendingTransactions() {
         `;
         tbody.appendChild(row);
     });
+}
+
+function updateAdminProjectsList() {
+    const tbody = document.getElementById('adminProjectsList');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    projects.forEach(project => {
+        const progress = (project.collected / project.target) * 100;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${project.name}</td>
+            <td>${formatCFA(project.target)}</td>
+            <td>${formatCFA(project.collected)}</td>
+            <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="flex: 1; height: 8px; background-color: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                        <div style="height: 100%; background-color: var(--accent-color); width: ${Math.min(progress, 100)}%;"></div>
+                    </div>
+                    <span style="font-size: 0.85rem;">${Math.floor(progress)}%</span>
+                </div>
+            </td>
+            <td><span class="status-badge ${project.status === 'active' ? 'status-active' : 'status-completed'}">${project.status}</span></td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-edit" onclick="openEditProjectModal('${project.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="admin-btn btn-delete" onclick="deleteProject('${project.id}')"><i class="fas fa-trash"></i></button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function updateAdminCommissionsList() {
+    const tbody = document.getElementById('adminCommissionsList');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    projects.forEach(project => {
+        const commission = (typeof commissions !== 'undefined') ? commissions.find(c => c.project_id == project.id) : null;
+        const commissionRate = commission ? commission.commission_rate : (typeof commissionSettings !== 'undefined' ? commissionSettings.defaultRate : 0);
+        const commissionAmount = project.collected * (commissionRate / 100);
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${project.name}</td>
+            <td>${commissionRate}%</td>
+            <td>${formatCFA(commissionAmount)}</td>
+            <td>${formatCFA(project.collected)}</td>
+            <td><span class="status-badge status-active">Actif</span></td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${project.id}')">
+                        <i class="fas fa-edit"></i> Modifier
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function updateAdminUsersList() {
+    const tbody = document.getElementById('adminUsersList');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    const startIndex = (currentUserPage - 1) * userPageSize;
+    const endIndex = Math.min(startIndex + userPageSize, users.length);
+    const displayedUsers = users.slice(startIndex, endIndex);
+    
+    if (displayedUsers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">Aucun utilisateur trouvé</td></tr>';
+        return;
+    }
+    
+    displayedUsers.forEach(user => {
+        const kycDoc = kycVerifications.find(k => k.user_id === user.id);
+        const kycStatus = kycDoc ? kycDoc.status : 'not_submitted';
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${user.name || 'N/R'}</td>
+            <td>${user.email}</td>
+            <td>${user.phone || 'N/R'}</td>
+            <td><span class="status-badge">${user.role}</span></td>
+            <td><span class="kyc-status">${kycStatus}</span></td>
+            <td>${formatCFA(user.total_invested || 0)}</td>
+            <td>${formatCFA(user.balance || 0)}</td>
+            <td>${new Date(user.created_at).toLocaleDateString()}</td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-edit" onclick="openUserDetailsModal('${user.id}')"><i class="fas fa-eye"></i></button>
+                    <button class="admin-btn btn-edit" onclick="openEditUserModal('${user.id}')"><i class="fas fa-edit"></i></button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function updateAdminInvestmentsList() {
+    const tbody = document.getElementById('adminInvestmentsList');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    const uniqueContributions = Array.from(new Map(contributions.map(c => [c.id, c])).values());
+    const recent = uniqueContributions.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 10);
+    
+    recent.forEach(contribution => {
+        const user = users.find(u => u.id === contribution.member_id);
+        const project = projects.find(p => p.id == contribution.project_id);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${user ? user.name : 'Inconnu'}</td>
+            <td>${project ? project.name : 'Projet'}</td>
+            <td>${formatCFA(contribution.amount)}</td>
+            <td>${getPaymentMethodText(contribution.payment_method)}</td>
+            <td><span class="status-badge">${contribution.status}</span></td>
+            <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
+            <td><button class="admin-btn btn-edit" onclick="showInvestmentDetails('${contribution.id}')"><i class="fas fa-eye"></i></button></td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function updatePagination() {
+    const paginationNumbers = document.getElementById('paginationNumbers');
+    if (!paginationNumbers) return;
+    paginationNumbers.innerHTML = '<span style="font-size:0.8rem; padding:10px;">Pagination active</span>';
 }
 
 function updateAdminProjectsList() {
