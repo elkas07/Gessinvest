@@ -6470,35 +6470,38 @@
         }
 
         // ⭐ VERSION CORRIGÉE : Filtre les doublons et sécurise l'affichage ⭐
+// =========================================================
+// BLOC ADMIN COMPLET ET CORRIGÉ (SÉCURISÉ)
+// =========================================================
 
 function updateAdminDashboard() {
-    console.log("🔄 Actualisation du dashboard admin...");
+    console.log("🎯 DASHBOARD UNIQUE - Calcul en cours...");
     
-    // 1. SÉCURITÉ ANTI-DOUBLONS : On ne garde que les contributions uniques par ID
+    // Nettoyage des doublons
     const uniqueContributions = Array.from(new Map(contributions.map(c => [c.id, c])).values());
-
-    // Mettre à jour les statistiques de base
-    document.getElementById('adminTotalUsers').textContent = users.length;
-    document.getElementById('adminTotalProjects').textContent = projects.length;
-    
-    // 2. CALCUL SÉCURISÉ : Somme basée sur la liste nettoyée
     const totalInvestments = uniqueContributions.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
-    document.getElementById('adminTotalInvestments').textContent = formatCFA(totalInvestments);
     
-    // 3. Transactions en attente
-    document.getElementById('adminPendingPayments').textContent = pendingTransactions.length;
+    // Mise à jour des compteurs
+    if(document.getElementById('adminTotalInvestments')) 
+        document.getElementById('adminTotalInvestments').textContent = formatCFA(totalInvestments);
+    if(document.getElementById('adminTotalUsers')) 
+        document.getElementById('adminTotalUsers').textContent = users.length;
+    if(document.getElementById('adminTotalProjects')) 
+        document.getElementById('adminTotalProjects').textContent = projects.length;
+    if(document.getElementById('adminPendingPayments')) 
+        document.getElementById('adminPendingPayments').textContent = pendingTransactions.length;
     
-    // 4. KYC en attente
     const pendingKYC = kycVerifications.filter(k => k.status === 'pending').length;
-    document.getElementById('adminPendingKYC').textContent = pendingKYC;
+    if(document.getElementById('adminPendingKYC')) 
+        document.getElementById('adminPendingKYC').textContent = pendingKYC;
     
-    // Mettre à jour les graphiques et listes
+    // Mise à jour des listes
     updateChartsWithRealData();
     updateAdminPendingTransactions();
     updateAdminProjectsList();
     updateAdminCommissionsList();
     updateAdminUsersList();
-    updateAdminInvestmentsList(); // Cette fonction utilisera aussi la liste nettoyée
+    updateAdminInvestmentsList(); 
     updatePaymentCalendar();
     updatePagination();
 }
@@ -6506,13 +6509,68 @@ function updateAdminDashboard() {
 function updateAdminPendingTransactions() {
     const tbody = document.getElementById('adminPendingTransactions');
     if (!tbody) return;
-    
     tbody.innerHTML = '';
     
     if (pendingTransactions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucune transaction en attente</td></tr>';
         return;
     }
+    
+    pendingTransactions.forEach(transaction => {
+        const user = users.find(u => u.id === transaction.member_id);
+        const project = transaction.project_id ? projects.find(p => p.id == transaction.project_id) : null;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${user ? user.name : 'Utilisateur inconnu'}</td>
+            <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
+            <td>${formatCFA(transaction.amount)}</td>
+            <td>${getPaymentMethodText(transaction.payment_method)}</td>
+            <td>${project ? project.name : 'N/A'}</td>
+            <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-validate" onclick="validateTransaction('${transaction.id}')">
+                        <i class="fas fa-check"></i> Valider
+                    </button>
+                    <button class="admin-btn btn-delete" onclick="rejectTransaction('${transaction.id}')">
+                        <i class="fas fa-times"></i> Refuser
+                    </button>
+                </div>
+            </td>`;
+        tbody.appendChild(row);
+    });
+}
+
+function updateAdminProjectsList() {
+    const tbody = document.getElementById('adminProjectsList');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    projects.forEach(project => {
+        const progress = (project.collected / project.target) * 100;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${project.name}</td>
+            <td>${formatCFA(project.target)}</td>
+            <td>${formatCFA(project.collected)}</td>
+            <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="flex: 1; height: 8px; background-color: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                        <div style="height: 100%; background-color: var(--accent-color); width: ${Math.min(progress, 100)}%;"></div>
+                    </div>
+                    <span style="font-size: 0.85rem;">${Math.floor(progress)}%</span>
+                </div>
+            </td>
+            <td><span class="status-badge ${project.status === 'active' ? 'status-active' : 'status-completed'}">${project.status}</span></td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-edit" onclick="openEditProjectModal('${project.id}')"><i class="fas fa-edit"></i></button>
+                    <button class="admin-btn btn-delete" onclick="deleteProject('${project.id}')"><i class="fas fa-trash"></i></button>
+                </div>
+            </td>`;
+        tbody.appendChild(row);
+    });
+}
     
     pendingTransactions.forEach(transaction => {
         const user = users.find(u => u.id === transaction.member_id);
