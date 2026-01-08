@@ -6469,294 +6469,284 @@
             }
         }
 
-        // Mettre à jour le dashboard admin
-        function updateAdminDashboard() {
-            // Mettre à jour les statistiques
-            document.getElementById('adminTotalUsers').textContent = users.length;
-            document.getElementById('adminTotalProjects').textContent = projects.length;
-            
-            const totalInvestments = contributions.reduce((sum, c) => sum + (c.amount || 0), 0);
-            document.getElementById('adminTotalInvestments').textContent = formatCFA(totalInvestments);
-            
-            document.getElementById('adminPendingPayments').textContent = pendingTransactions.length;
-            
-            const pendingKYC = kycVerifications.filter(k => k.status === 'pending').length;
-            document.getElementById('adminPendingKYC').textContent = pendingKYC;
-            
-            // Mettre à jour les graphiques avec données réelles
-            updateChartsWithRealData();
-            
-            // Mettre à jour les listes
-            updateAdminPendingTransactions();
-            updateAdminProjectsList();
-            updateAdminCommissionsList();
-            updateAdminUsersList();
-            updateAdminInvestmentsList();
-            updatePaymentCalendar();
-            
-            // Mettre à jour la pagination
-            updatePagination();
-        }
+        // ⭐ VERSION CORRIGÉE : Filtre les doublons et sécurise l'affichage ⭐
 
-        function updateAdminPendingTransactions() {
-            const tbody = document.getElementById('adminPendingTransactions');
-            if (!tbody) return;
-            
-            tbody.innerHTML = '';
-            
-            if (pendingTransactions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucune transaction en attente</td></tr>';
-                return;
-            }
-            
-            pendingTransactions.forEach(transaction => {
-                const user = users.find(u => u.id === transaction.member_id);
-                const project = transaction.project_id ? projects.find(p => p.id == transaction.project_id) : null;
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${user ? user.name : 'Utilisateur inconnu'}</td>
-                    <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
-                    <td>${formatCFA(transaction.amount)}</td>
-                    <td>${getPaymentMethodText(transaction.payment_method)}</td>
-                    <td>${project ? project.name : 'N/A'}</td>
-                    <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
-                    <td>
-                        <div class="admin-actions">
-                            <button class="admin-btn btn-validate" onclick="validateTransaction('${transaction.id}')">
-                                <i class="fas fa-check"></i> Valider
-                            </button>
-                            <button class="admin-btn btn-delete" onclick="rejectTransaction('${transaction.id}')">
-                                <i class="fas fa-times"></i> Refuser
-                            </button>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
+function updateAdminDashboard() {
+    console.log("🔄 Actualisation du dashboard admin...");
+    
+    // 1. SÉCURITÉ ANTI-DOUBLONS : On ne garde que les contributions uniques par ID
+    const uniqueContributions = Array.from(new Map(contributions.map(c => [c.id, c])).values());
 
-        function updateAdminProjectsList() {
-            const tbody = document.getElementById('adminProjectsList');
-            if (!tbody) return;
-            
-            tbody.innerHTML = '';
-            
-            projects.forEach(project => {
-                const progress = (project.collected / project.target) * 100;
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${project.name}</td>
-                    <td>${formatCFA(project.target)}</td>
-                    <td>${formatCFA(project.collected)}</td>
-                    <td>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <div style="flex: 1; height: 8px; background-color: #e2e8f0; border-radius: 4px; overflow: hidden;">
-                                <div style="height: 100%; background-color: var(--accent-color); width: ${Math.min(progress, 100)}%;"></div>
-                            </div>
-                            <span style="font-size: 0.85rem; color: var(--text-light);">${Math.floor(progress)}%</span>
-                        </div>
-                    </td>
-                    <td><span class="status-badge ${project.status === 'active' ? 'status-active' : project.status === 'completed' ? 'status-completed' : 'status-pending'}">${project.status === 'active' ? 'Actif' : project.status === 'completed' ? 'Terminé' : 'En attente'}</span></td>
-                    <td>
-                        <div class="admin-actions">
-                            <button class="admin-btn btn-edit" onclick="openEditProjectModal('${project.id}')">
-                                <i class="fas fa-edit"></i> Modifier
-                            </button>
-                            <button class="admin-btn btn-delete" onclick="deleteProject('${project.id}')">
-                                <i class="fas fa-trash"></i> Supprimer
-                            </button>
-                            <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${project.id}')">
-                                <i class="fas fa-percentage"></i> Commission
-                            </button>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
+    // Mettre à jour les statistiques de base
+    document.getElementById('adminTotalUsers').textContent = users.length;
+    document.getElementById('adminTotalProjects').textContent = projects.length;
+    
+    // 2. CALCUL SÉCURISÉ : Somme basée sur la liste nettoyée
+    const totalInvestments = uniqueContributions.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+    document.getElementById('adminTotalInvestments').textContent = formatCFA(totalInvestments);
+    
+    // 3. Transactions en attente
+    document.getElementById('adminPendingPayments').textContent = pendingTransactions.length;
+    
+    // 4. KYC en attente
+    const pendingKYC = kycVerifications.filter(k => k.status === 'pending').length;
+    document.getElementById('adminPendingKYC').textContent = pendingKYC;
+    
+    // Mettre à jour les graphiques et listes
+    updateChartsWithRealData();
+    updateAdminPendingTransactions();
+    updateAdminProjectsList();
+    updateAdminCommissionsList();
+    updateAdminUsersList();
+    updateAdminInvestmentsList(); // Cette fonction utilisera aussi la liste nettoyée
+    updatePaymentCalendar();
+    updatePagination();
+}
 
-        function updateAdminCommissionsList() {
-            const tbody = document.getElementById('adminCommissionsList');
-            if (!tbody) return;
-            
-            tbody.innerHTML = '';
-            
-            projects.forEach(project => {
-                const commission = commissions.find(c => c.project_id == project.id);
-                const commissionRate = commission ? commission.commission_rate : commissionSettings.defaultRate;
-                const commissionAmount = project.collected * (commissionRate / 100);
-                
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${project.name}</td>
-                    <td>${commissionRate}%</td>
-                    <td>${formatCFA(commissionAmount)}</td>
-                    <td>${formatCFA(project.collected)}</td>
-                    <td><span class="status-badge status-active">Actif</span></td>
-                    <td>
-                        <div class="admin-actions">
-                            <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${project.id}')">
-                                <i class="fas fa-edit"></i> Modifier
-                            </button>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
+function updateAdminPendingTransactions() {
+    const tbody = document.getElementById('adminPendingTransactions');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if (pendingTransactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucune transaction en attente</td></tr>';
+        return;
+    }
+    
+    pendingTransactions.forEach(transaction => {
+        const user = users.find(u => u.id === transaction.member_id);
+        const project = transaction.project_id ? projects.find(p => p.id == transaction.project_id) : null;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${user ? user.name : 'Utilisateur inconnu'}</td>
+            <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
+            <td>${formatCFA(transaction.amount)}</td>
+            <td>${getPaymentMethodText(transaction.payment_method)}</td>
+            <td>${project ? project.name : 'N/A'}</td>
+            <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-validate" onclick="validateTransaction('${transaction.id}')">
+                        <i class="fas fa-check"></i> Valider
+                    </button>
+                    <button class="admin-btn btn-delete" onclick="rejectTransaction('${transaction.id}')">
+                        <i class="fas fa-times"></i> Refuser
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
 
-        function updateAdminUsersList() {
-            const tbody = document.getElementById('adminUsersList');
-            if (!tbody) return;
-            
-            tbody.innerHTML = '';
-            
-            const startIndex = (currentUserPage - 1) * userPageSize;
-            const endIndex = Math.min(startIndex + userPageSize, users.length);
-            const displayedUsers = users.slice(startIndex, endIndex);
-            
-            if (displayedUsers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">Aucun utilisateur trouvé</td></tr>';
-                return;
-            }
-            
-            displayedUsers.forEach(user => {
-                const kycDoc = kycVerifications.find(k => k.user_id === user.id);
-                const kycStatus = kycDoc ? kycDoc.status : 'not_submitted';
-                const kycStatusText = kycStatus === 'not_submitted' ? 'Non soumis' : 
-                                     kycStatus === 'pending' ? 'En attente' :
-                                     kycStatus === 'verified' ? 'Vérifié' : 'Rejeté';
-                
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${user.name || 'Non renseigné'}</td>
-                    <td>${user.email}</td>
-                    <td>${user.phone || 'Non renseigné'}</td>
-                    <td><span class="status-badge ${user.role === 'admin' ? 'status-active' : 'status-pending'}">${user.role === 'admin' ? 'Admin' : 'Investisseur'}</span></td>
-                    <td><span class="kyc-status kyc-${kycStatus.replace('_', '-')}">${kycStatusText}</span></td>
-                    <td>${formatCFA(user.total_invested || 0)}</td>
-                    <td>${formatCFA(user.balance || 0)}</td>
-                    <td>${new Date(user.created_at).toLocaleDateString()}</td>
-                    <td>
-                        <div class="admin-actions">
-                            <button class="admin-btn btn-edit" onclick="openUserDetailsModal('${user.id}')">
-                                <i class="fas fa-eye"></i> Voir
-                            </button>
-                            <button class="admin-btn btn-edit" onclick="openEditUserModal('${user.id}')">
-                                <i class="fas fa-edit"></i> Modifier
-                            </button>
-                            ${user.role !== 'admin' ? `
-                            <button class="admin-btn btn-suspend" onclick="suspendUser('${user.id}')">
-                                <i class="fas fa-pause"></i> Suspendre
-                            </button>
-                            ` : ''}
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
+function updateAdminProjectsList() {
+    const tbody = document.getElementById('adminProjectsList');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    projects.forEach(project => {
+        const progress = (project.collected / project.target) * 100;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${project.name}</td>
+            <td>${formatCFA(project.target)}</td>
+            <td>${formatCFA(project.collected)}</td>
+            <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="flex: 1; height: 8px; background-color: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                        <div style="height: 100%; background-color: var(--accent-color); width: ${Math.min(progress, 100)}%;"></div>
+                    </div>
+                    <span style="font-size: 0.85rem; color: var(--text-light);">${Math.floor(progress)}%</span>
+                </div>
+            </td>
+            <td><span class="status-badge ${project.status === 'active' ? 'status-active' : project.status === 'completed' ? 'status-completed' : 'status-pending'}">${project.status === 'active' ? 'Actif' : project.status === 'completed' ? 'Terminé' : 'En attente'}</span></td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-edit" onclick="openEditProjectModal('${project.id}')">
+                        <i class="fas fa-edit"></i> Modifier
+                    </button>
+                    <button class="admin-btn btn-delete" onclick="deleteProject('${project.id}')">
+                        <i class="fas fa-trash"></i> Supprimer
+                    </button>
+                    <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${project.id}')">
+                        <i class="fas fa-percentage"></i> Commission
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
 
-        function updateAdminInvestmentsList() {
-            const tbody = document.getElementById('adminInvestmentsList');
-            if (!tbody) return;
-            
-            tbody.innerHTML = '';
-            
-            // Prendre les 10 dernières contributions
-            const recentContributions = contributions
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-                .slice(0, 10);
-            
-            if (recentContributions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucun investissement récent</td></tr>';
-                return;
-            }
-            
-            recentContributions.forEach(contribution => {
-                const user = users.find(u => u.id === contribution.member_id);
-                const project = projects.find(p => p.id == contribution.project_id);
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${user ? user.name : 'Utilisateur inconnu'}</td>
-                    <td>${project ? project.name : 'Projet inconnu'}</td>
-                    <td>${formatCFA(contribution.amount)}</td>
-                    <td>${getPaymentMethodText(contribution.payment_method)}</td>
-                    <td><span class="status-badge ${contribution.status === 'completed' ? 'status-completed' : 'status-pending'}">${contribution.status === 'completed' ? 'Terminé' : 'En attente'}</span></td>
-                    <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
-                    <td>
-                        <div class="admin-actions">
-                            <button class="admin-btn btn-edit" onclick="showInvestmentDetails('${contribution.id}')">
-                                <i class="fas fa-eye"></i> Détails
-                            </button>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
+function updateAdminCommissionsList() {
+    const tbody = document.getElementById('adminCommissionsList');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    projects.forEach(project => {
+        const commission = (typeof commissions !== 'undefined') ? commissions.find(c => c.project_id == project.id) : null;
+        const commissionRate = commission ? commission.commission_rate : (typeof commissionSettings !== 'undefined' ? commissionSettings.defaultRate : 0);
+        const commissionAmount = project.collected * (commissionRate / 100);
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${project.name}</td>
+            <td>${commissionRate}%</td>
+            <td>${formatCFA(commissionAmount)}</td>
+            <td>${formatCFA(project.collected)}</td>
+            <td><span class="status-badge status-active">Actif</span></td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${project.id}')">
+                        <i class="fas fa-edit"></i> Modifier
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
 
-        function updatePagination() {
-            const totalPages = Math.ceil(totalUserCount / userPageSize);
-            const paginationNumbers = document.getElementById('paginationNumbers');
-            const paginationInfo = document.getElementById('paginationInfo');
-            
-            if (!paginationNumbers || !paginationInfo) return;
-            
-            // Mettre à jour les informations
-            const start = (currentUserPage - 1) * userPageSize + 1;
-            const end = Math.min(start + userPageSize - 1, totalUserCount);
-            paginationInfo.textContent = `Affichage ${start}-${end} sur ${totalUserCount} utilisateurs`;
-            
-            // Générer les numéros de page
-            paginationNumbers.innerHTML = '';
-            
-            // Bouton précédent
-            const prevBtn = document.createElement('button');
-            prevBtn.className = 'pagination-number';
-            prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
-            prevBtn.disabled = currentUserPage === 1;
-            prevBtn.onclick = () => {
-                if (currentUserPage > 1) {
-                    currentUserPage--;
-                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
-                }
+function updateAdminUsersList() {
+    const tbody = document.getElementById('adminUsersList');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    const startIndex = (currentUserPage - 1) * userPageSize;
+    const endIndex = Math.min(startIndex + userPageSize, users.length);
+    const displayedUsers = users.slice(startIndex, endIndex);
+    
+    if (displayedUsers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">Aucun utilisateur trouvé</td></tr>';
+        return;
+    }
+    
+    displayedUsers.forEach(user => {
+        const kycDoc = kycVerifications.find(k => k.user_id === user.id);
+        const kycStatus = kycDoc ? kycDoc.status : 'not_submitted';
+        const kycStatusText = kycStatus === 'not_submitted' ? 'Non soumis' : 
+                             kycStatus === 'pending' ? 'En attente' :
+                             kycStatus === 'verified' ? 'Vérifié' : 'Rejeté';
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${user.name || 'Non renseigné'}</td>
+            <td>${user.email}</td>
+            <td>${user.phone || 'Non renseigné'}</td>
+            <td><span class="status-badge ${user.role === 'admin' ? 'status-active' : 'status-pending'}">${user.role === 'admin' ? 'Admin' : 'Investisseur'}</span></td>
+            <td><span class="kyc-status kyc-${kycStatus.replace('_', '-')}">${kycStatusText}</span></td>
+            <td>${formatCFA(user.total_invested || 0)}</td>
+            <td>${formatCFA(user.balance || 0)}</td>
+            <td>${new Date(user.created_at).toLocaleDateString()}</td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-edit" onclick="openUserDetailsModal('${user.id}')">
+                        <i class="fas fa-eye"></i> Voir
+                    </button>
+                    <button class="admin-btn btn-edit" onclick="openEditUserModal('${user.id}')">
+                        <i class="fas fa-edit"></i> Modifier
+                    </button>
+                    ${user.role !== 'admin' ? `
+                    <button class="admin-btn btn-suspend" onclick="suspendUser('${user.id}')">
+                        <i class="fas fa-pause"></i> Suspendre
+                    </button>
+                    ` : ''}
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function updateAdminInvestmentsList() {
+    const tbody = document.getElementById('adminInvestmentsList');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    // SÉCURITÉ : Nettoyer les doublons ici aussi
+    const uniqueContributions = Array.from(new Map(contributions.map(c => [c.id, c])).values());
+    
+    const recentContributions = uniqueContributions
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 10);
+    
+    if (recentContributions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucun investissement récent</td></tr>';
+        return;
+    }
+    
+    recentContributions.forEach(contribution => {
+        const user = users.find(u => u.id === contribution.member_id);
+        const project = projects.find(p => p.id == contribution.project_id);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${user ? user.name : 'Utilisateur inconnu'}</td>
+            <td>${project ? project.name : 'Projet inconnu'}</td>
+            <td>${formatCFA(contribution.amount)}</td>
+            <td>${getPaymentMethodText(contribution.payment_method)}</td>
+            <td><span class="status-badge ${contribution.status === 'completed' ? 'status-completed' : 'status-pending'}">${contribution.status === 'completed' ? 'Terminé' : 'En attente'}</span></td>
+            <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-edit" onclick="showInvestmentDetails('${contribution.id}')">
+                        <i class="fas fa-eye"></i> Détails
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function updatePagination() {
+    const totalPages = Math.ceil((typeof totalUserCount !== 'undefined' ? totalUserCount : users.length) / userPageSize);
+    const paginationNumbers = document.getElementById('paginationNumbers');
+    const paginationInfo = document.getElementById('paginationInfo');
+    if (!paginationNumbers || !paginationInfo) return;
+    
+    const start = (currentUserPage - 1) * userPageSize + 1;
+    const end = Math.min(start + userPageSize - 1, (typeof totalUserCount !== 'undefined' ? totalUserCount : users.length));
+    paginationInfo.textContent = `Affichage ${start}-${end} sur ${(typeof totalUserCount !== 'undefined' ? totalUserCount : users.length)} utilisateurs`;
+    
+    paginationNumbers.innerHTML = '';
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'pagination-number';
+    prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+    prevBtn.disabled = currentUserPage === 1;
+    prevBtn.onclick = () => {
+        if (currentUserPage > 1) {
+            currentUserPage--;
+            loadUsers(currentUserPage, userPageSize);
+        }
+    };
+    paginationNumbers.appendChild(prevBtn);
+    
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentUserPage - 2 && i <= currentUserPage + 2)) {
+            const pageBtn = document.createElement('button');
+            pageBtn.className = `pagination-number ${i === currentUserPage ? 'active' : ''}`;
+            pageBtn.textContent = i;
+            pageBtn.onclick = () => {
+                currentUserPage = i;
+                loadUsers(currentUserPage, userPageSize);
             };
-            paginationNumbers.appendChild(prevBtn);
-            
-            // Numéros de page
-            const maxPagesToShow = 5;
-            let startPage = Math.max(1, currentUserPage - Math.floor(maxPagesToShow / 2));
-            let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
-            
-            if (endPage - startPage + 1 < maxPagesToShow) {
-                startPage = Math.max(1, endPage - maxPagesToShow + 1);
-            }
-            
-            for (let i = startPage; i <= endPage; i++) {
-                const pageBtn = document.createElement('button');
-                pageBtn.className = `pagination-number ${i === currentUserPage ? 'active' : ''}`;
-                pageBtn.textContent = i;
-                pageBtn.onclick = () => {
-                    currentUserPage = i;
-                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
-                };
-                paginationNumbers.appendChild(pageBtn);
-            }
-            
-            // Bouton suivant
-            const nextBtn = document.createElement('button');
-            nextBtn.className = 'pagination-number';
-            nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
-            nextBtn.disabled = currentUserPage === totalPages;
-            nextBtn.onclick = () => {
-                if (currentUserPage < totalPages) {
-                    currentUserPage++;
-                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
-                }
-            };
-            paginationNumbers.appendChild(nextBtn);
+            paginationNumbers.appendChild(pageBtn);
         }
+    }
+    
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'pagination-number';
+    nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+    nextBtn.disabled = currentUserPage === totalPages;
+    nextBtn.onclick = () => {
+        if (currentUserPage < totalPages) {
+            currentUserPage++;
+            loadUsers(currentUserPage, userPageSize);
+        }
+    };
+    paginationNumbers.appendChild(nextBtn);
+}
 
         function showInvestmentDetails(investmentId) {
             const investment = contributions.find(c => c.id === investmentId);
