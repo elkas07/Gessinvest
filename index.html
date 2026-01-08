@@ -5713,114 +5713,106 @@ async function loadContributions() {
         }
 
         async function validateTransaction(transactionId) {
-            // CORRECTION : Vérifier window.supabaseClient
-            if (!isSupabaseConnected || !window.supabaseClient) {
-                showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
+    if (!isSupabaseConnected || !window.supabaseClient) {
+        showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
+        return;
+    }
+
+    try {
+        console.log('✅ Validation de la transaction:', transactionId);
+        
+        // 1. Récupérer la transaction en attente
+        const { data: transaction, error: transactionError } = await window.supabaseClient
+            .from('transactions')
+            .select('*')
+            .eq('id', transactionId)
+            .eq('status', 'pending')
+            .single();
+
+        if (transactionError || !transaction) {
+            showNotification('Transaction déjà traitée ou introuvable.', 'error');
+            return;
+        }
+
+        // 2. Nettoyer l'ID du membre et le récupérer
+        const cleanId = String(transaction.member_id).replace(/"/g, '').trim();
+        const { data: member, error: memberError } = await window.supabaseClient
+            .from('members')
+            .select('*')
+            .eq('id', cleanId)
+            .maybeSingle();
+
+        if (memberError || !member) {
+            console.error('❌ Membre non trouvé:', cleanId);
+            showNotification('Erreur: Impossible de trouver le membre.', 'error');
+            return;
+        }
+
+        let updateData = {};
+        
+        // 3. Calcul du nouveau solde selon le type
+        if (transaction.type === 'deposit') {
+            const newBalance = (Number(member.balance) || 0) + Number(transaction.amount);
+            updateData = { balance: newBalance };
+            console.log(`💰 Dépôt : Nouveau solde calculé : ${newBalance}`);
+
+        } else if (transaction.type === 'investment' || transaction.type === 'contribution') {
+            if ((Number(member.balance) || 0) < Number(transaction.amount)) {
+                showNotification('Solde insuffisant pour cet investissement', 'error');
                 return;
             }
+            const newBalance = (Number(member.balance) || 0) - Number(transaction.amount);
+            const newTotalInvested = (Number(member.total_invested) || 0) + Number(transaction.amount);
+            updateData = { 
+                balance: newBalance, 
+                total_invested: newTotalInvested 
+            };
+            console.log(`💰 Investissement : Nouveau solde calculé : ${newBalance}`);
+        }
 
-            try {
-                console.log('✅ Validation de la transaction:', transactionId);
-                
-                // 1. Récupérer la transaction avec vérification du statut 'pending'
-                const { data: transaction, error: transactionError } = await window.supabaseClient
-                    .from('transactions')
-                    .select('*')
-                    .eq('id', transactionId)
-                    .eq('status', 'pending') // ⭐ VÉRIFIER QU'ELLE EST BIEN EN PENDING ⭐
-                    .single();
+        // --- ÉTAPE CRUCIALE : ENREGISTREMENT DANS LA BASE DE DONNÉES ---
 
-                if (transactionError) {
-                    console.error('❌ Transaction non trouvée ou déjà traitée:', transactionError);
-                    showNotification('Cette transaction a déjà été traitée ou n\'existe pas.', 'error');
-                    return;
-                }
+        // A. Mettre à jour le membre (Solde)
+        const { error: userUpdateError } = await window.supabaseClient
+            .from('members')
+            .update(updateData)
+            .eq('id', member.id);
 
-                // ⭐⭐ CORRECTION CRITIQUE - Nettoyer l'ID du membre ⭐⭐
-                console.log('transaction.member_id brut:', transaction.member_id);
-                const cleanId = String(transaction.member_id).replace(/"/g, '').trim();
-                console.log('transaction.member_id nettoyé:', cleanId);
+        if (userUpdateError) throw userUpdateError;
 
-                // ⭐⭐ CORRECTION CRITIQUE - Utiliser maybeSingle au lieu de single ⭐⭐
-                const { data: member, error: memberError } = await window.supabaseClient
-                    .from('members')
-                    .select('*')
-                    .eq('id', cleanId)   // ⭐ CORRECTION: UUID sans guillemets parasites
-                    .maybeSingle(); // ⭐ CORRECTION: maybeSingle au lieu de single
+        // B. Mettre à jour la transaction (Statut)
+        const { error: transacUpdateError } = await window.supabaseClient
+            .from('transactions')
+            .update({ 
+                status: 'completed', 
+                validated_at: new Date().toISOString() 
+            })
+            .eq('id', transactionId);
 
-                if (memberError) {
-                    console.error('❌ Erreur récupération membre:', memberError);
-                    showNotification('Erreur: Impossible de récupérer le membre.', 'error');
-                    return;
-                }
+        if (transacUpdateError) throw transacUpdateError;
 
-                if (!member) {
-                    console.error('❌ Membre non trouvé avec l\'ID:', cleanId);
-                    showNotification('Erreur: Membre non trouvé. L\'ID peut être invalide.', 'error');
-                    return;
-                }
+        // C. Créer la ligne dans la table 'contributions' pour le dashboard
+        if (transaction.type === 'investment' || transaction.type === 'contribution') {
+            await window.supabaseClient
+                .from('contributions')
+                .insert([{
+                    id: transaction.id,
+                    member_id: member.id,
+                    project_id: transaction.project_id,
+                    amount: transaction.amount,
+                    created_at: new Date().toISOString()
+                }]);
+        }
 
-                console.log('✅ Membre trouvé:', member);
+        // 4. Rafraîchir l'affichage
+        await refreshAdminDashboard();
+        showNotification('Validation réussie : Solde et transactions mis à jour !');
 
-                // 3. Traiter selon le type de transaction
-                if (transaction.type === 'deposit') {
-                    // Mise à jour du solde du membre
-                    const newBalance = (member.balance || 0) + transaction.amount;
-                    const { error: updateError } = await window.supabaseClient
-                        .from('members')
-                        .update({ balance: newBalance })
-                        .eq('id', member.id);
-
-                    if (updateError) {
-                        console.error('❌ Erreur mise à jour solde:', updateError);
-                        throw updateError;
-                    }
-
-                    // CORRECTION : Mettre à jour le solde localement si c'est l'utilisateur courant
-                    if (currentUser && currentUser.id === member.id) {
-                        member.balance = newBalance;
-                    }
-
-                    showNotification(`Dépôt de ${formatCFA(transaction.amount)} validé ! Solde mis à jour.`);
-
-                } else if (transaction.type === 'investment') {
-                    // ⭐⭐ CORRECTION 2 : Vérifier le solde avec des logs détaillés ⭐⭐
-                    console.log('💰 Vérification solde pour investissement:');
-                    console.log('   Solde actuel:', member.balance);
-                    console.log('   Montant investissement:', transaction.amount);
-                    
-                    if ((member.balance || 0) < transaction.amount) {
-                        showNotification('Solde insuffisant pour valider cet investissement', 'error');
-                        return;
-                    }
-
-                    // ⭐⭐ CORRECTION 2 : Mettre à jour le solde et total investi du membre ⭐⭐
-                    const newBalance = (member.balance || 0) - transaction.amount;
-                    const newTotalInvested = (member.total_invested || 0) + transaction.amount;
-                    
-                    console.log('💰 Nouveau solde après investissement:', newBalance);
-                    console.log('💰 Nouveau total investi:', newTotalInvested);
-                    
-                    const { error: updateBalanceError } = await window.supabaseClient
-                        .from('members')
-                        .update({ 
-                            balance: newBalance,
-                            total_invested: newTotalInvested
-                        })
-                        .eq('id', member.id);
-
-                    if (updateBalanceError) {
-                        console.error('❌ Erreur mise à jour solde membre:', updateBalanceError);
-                        throw updateBalanceError;
-                    }
-
-                    // ⭐⭐ CORRECTION 2 : Mettre à jour le membre localement si c'est l'utilisateur courant ⭐⭐
-                    if (currentUser && currentUser.id === member.id) {
-                        member.balance = newBalance;
-                        member.total_invested = newTotalInvested;
-                        // Mettre à jour l'affichage immédiatement
-                        updateMemberDashboard();
-                    }
+    } catch (error) {
+        console.error('❌ Erreur critique lors de la validation:', error);
+        showNotification('Erreur technique lors de la validation', 'error');
+    }
+}
 
                     // Mettre à jour le projet
                     const project = projects.find(p => p.id == transaction.project_id);
