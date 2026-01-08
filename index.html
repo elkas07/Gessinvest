@@ -3799,38 +3799,38 @@
             }
         }
 
-       async function loadContributions() {
-    if (!isSupabaseConnected || !window.supabaseClient) {
-        console.log('💳 Chargement contributions: mode hors ligne');
-        contributions = [];
-        return;
-    }
+      async function loadContributions() {
+            if (!isSupabaseConnected || !window.supabaseClient) {
+                console.log('💳 Chargement contributions: mode hors ligne');
+                contributions = [];
+                return;
+            }
 
-    try {
-        const { data, error } = await window.supabaseClient
-            .from('contributions')
-            .select('*')
-            .order('created_at', { ascending: false });
-        
-        if (error) throw error;
+            try {
+                const { data, error } = await window.supabaseClient
+                    .from('contributions')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
 
-        if (data) {
-            // FORCE LE REMPLACEMENT COMPLET
-            contributions = [...data]; 
-            
-            // LOG DE CONTRÔLE : Vérifiez ce chiffre dans votre console
-            console.log("📊 Nombre de lignes récupérées :", contributions.length);
-            console.log("💰 Somme réelle calculée :", contributions.reduce((s, c) => s + (c.amount || 0), 0));
-        } else {
-            contributions = [];
+                // REMPLACEMENT STRICT : On efface tout et on met les nouvelles données
+                contributions = data ? [...data] : []; 
+                
+                console.log("📊 Nombre de lignes récupérées :", contributions.length);
+                
+                // ⭐ APPEL DU DASHBOARD (🎯) : Pour calculer le montant sans doublons
+                if (typeof updateAdminDashboard === "function") {
+                    updateAdminDashboard();
+                }
+
+            } catch (error) {
+                console.error('❌ Erreur chargement contributions:', error);
+                contributions = [];
+            }
         }
-    } catch (error) {
-        console.error('❌ Erreur chargement contributions:', error);
-        contributions = [];
-    }
-}
+
         async function loadCommissions() {
-            // CORRECTION : Vérifier window.supabaseClient
             if (!isSupabaseConnected || !window.supabaseClient) {
                 console.log('💰 Chargement commissions: mode hors ligne');
                 commissions = [];
@@ -3867,7 +3867,6 @@
         }
 
         async function loadCommissionSettings() {
-            // CORRECTION : Vérifier window.supabaseClient
             if (!isSupabaseConnected || !window.supabaseClient) {
                 console.log('⚙️ Chargement paramètres: mode hors ligne');
                 return;
@@ -3892,7 +3891,100 @@
                 console.error('❌ Erreur chargement paramètres commission:', error);
             }
         }
+		
+async function loadContributions() {
+            if (!isSupabaseConnected || !window.supabaseClient) {
+                console.log('💳 Chargement contributions: mode hors ligne');
+                contributions = [];
+                return;
+            }
 
+            try {
+                const { data, error } = await window.supabaseClient
+                    .from('contributions')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+
+                // REMPLACEMENT STRICT : On efface tout et on met les nouvelles données
+                contributions = data ? [...data] : []; 
+                
+                console.log("📊 Nombre de lignes récupérées :", contributions.length);
+                
+                // ⭐ APPEL DU DASHBOARD (🎯) : Pour calculer le montant sans doublons
+                if (typeof updateAdminDashboard === "function") {
+                    updateAdminDashboard();
+                }
+
+            } catch (error) {
+                console.error('❌ Erreur chargement contributions:', error);
+                contributions = [];
+            }
+        }
+
+        async function loadCommissions() {
+            if (!isSupabaseConnected || !window.supabaseClient) {
+                console.log('💰 Chargement commissions: mode hors ligne');
+                commissions = [];
+                return;
+            }
+
+            try {
+                const { data, error } = await window.supabaseClient
+                    .from('commissions')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                if (!error && data) {
+                    commissions = data;
+                } else {
+                    commissions = projects.map(project => ({
+                        id: project.id,
+                        project_id: project.id,
+                        commission_rate: commissionSettings.defaultRate,
+                        commission_amount: (project.collected || 0) * (commissionSettings.defaultRate / 100),
+                        status: 'active'
+                    }));
+                }
+            } catch (error) {
+                console.error('❌ Erreur chargement commissions:', error);
+                commissions = projects.map(project => ({
+                    id: project.id,
+                    project_id: project.id,
+                    commission_rate: commissionSettings.defaultRate,
+                    commission_amount: (project.collected || 0) * (commissionSettings.defaultRate / 100),
+                    status: 'active'
+                }));
+            }
+        }
+
+        async function loadCommissionSettings() {
+            if (!isSupabaseConnected || !window.supabaseClient) {
+                console.log('⚙️ Chargement paramètres: mode hors ligne');
+                return;
+            }
+
+            try {
+                const { data, error } = await window.supabaseClient
+                    .from('platform_settings')
+                    .select('*')
+                    .eq('key', 'commission_settings')
+                    .single();
+                
+                if (!error && data && data.value) {
+                    commissionSettings = data.value;
+                } else {
+                    const localSettings = localStorage.getItem('gessinvest_commission_settings');
+                    if (localSettings) {
+                        commissionSettings = JSON.parse(localSettings);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Erreur chargement paramètres commission:', error);
+            }
+        }
+		
         // Chargement paginé des utilisateurs avec filtres avancés
         async function loadUsers(page = 1, pageSize = 50, search = '', role = '', status = '', kycStatus = '') {
             // CORRECTION : Vérifier window.supabaseClient
@@ -5619,7 +5711,6 @@
                 showNotification('Erreur lors de l\'investissement: ' + error.message, 'error');
             }
         }
-
 
         async function validateTransaction(transactionId) {
             // CORRECTION : Vérifier window.supabaseClient
