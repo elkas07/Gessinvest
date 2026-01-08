@@ -5713,6 +5713,7 @@ async function loadContributions() {
         }
 
         async function validateTransaction(transactionId) {
+    // CORRECTION : Vérifier window.supabaseClient
     if (!isSupabaseConnected || !window.supabaseClient) {
         showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
         return;
@@ -5721,7 +5722,7 @@ async function loadContributions() {
     try {
         console.log('✅ Validation de la transaction:', transactionId);
         
-        // 1. Récupérer la transaction en attente
+        // 1. Récupérer la transaction avec vérification du statut 'pending'
         const { data: transaction, error: transactionError } = await window.supabaseClient
             .from('transactions')
             .select('*')
@@ -5730,12 +5731,15 @@ async function loadContributions() {
             .single();
 
         if (transactionError || !transaction) {
-            showNotification('Transaction déjà traitée ou introuvable.', 'error');
+            console.error('❌ Transaction non trouvée ou déjà traitée:', transactionError);
+            showNotification('Cette transaction a déjà été traitée ou n\'existe pas.', 'error');
             return;
         }
 
-        // 2. Nettoyer l'ID du membre et le récupérer
+        // ⭐ Nettoyage de l'ID du membre
         const cleanId = String(transaction.member_id).replace(/"/g, '').trim();
+
+        // 2. Récupérer le membre
         const { data: member, error: memberError } = await window.supabaseClient
             .from('members')
             .select('*')
@@ -5744,152 +5748,245 @@ async function loadContributions() {
 
         if (memberError || !member) {
             console.error('❌ Membre non trouvé:', cleanId);
-            showNotification('Erreur: Impossible de trouver le membre.', 'error');
+            showNotification('Erreur: Impossible de récupérer le membre.', 'error');
             return;
         }
 
-        let updateData = {};
-        
-        // 3. Calcul du nouveau solde selon le type
+        console.log('✅ Membre trouvé:', member.name);
+
+        // 3. Traiter selon le type de transaction
         if (transaction.type === 'deposit') {
             const newBalance = (Number(member.balance) || 0) + Number(transaction.amount);
-            updateData = { balance: newBalance };
-            console.log(`💰 Dépôt : Nouveau solde calculé : ${newBalance}`);
+            const { error: updateError } = await window.supabaseClient
+                .from('members')
+                .update({ balance: newBalance })
+                .eq('id', member.id);
+
+            if (updateError) throw updateError;
+            showNotification(`Dépôt de ${formatCFA(transaction.amount)} validé !`);
 
         } else if (transaction.type === 'investment' || transaction.type === 'contribution') {
-            if ((Number(member.balance) || 0) < Number(transaction.amount)) {
-                showNotification('Solde insuffisant pour cet investissement', 'error');
+            
+            if ((Number(member.balance) || 0) < transaction.amount) {
+                showNotification('Solde insuffisant pour valider cet investissement', 'error');
                 return;
             }
-            const newBalance = (Number(member.balance) || 0) - Number(transaction.amount);
-            const newTotalInvested = (Number(member.total_invested) || 0) + Number(transaction.amount);
-            updateData = { 
-                balance: newBalance, 
-                total_invested: newTotalInvested 
-            };
-            console.log(`💰 Investissement : Nouveau solde calculé : ${newBalance}`);
-        }
 
-        // --- ÉTAPE CRUCIALE : ENREGISTREMENT DANS LA BASE DE DONNÉES ---
+            const newBalance = (Number(member.balance) || 0) - transaction.amount;
+            const newTotalInvested = (Number(member.total_invested) || 0) + transaction.amount;
+            
+            // 🔥 MISE À JOUR DU SOLDE DANS SUPABASE
+            const { error: updateBalanceError } = await window.supabaseClient
+                .from('members')
+                .update({ 
+                    balance: newBalance,
+                    total_invested: newTotalInvested
+                })
+                .eq('id', member.id);
 
-        // A. Mettre à jour le membre (Solde)
-        const { error: userUpdateError } = await window.supabaseClient
-            .from('members')
-            .update(updateData)
-            .eq('id', member.id);
+            if (updateBalanceError) throw updateBalanceError;
 
-        if (userUpdateError) throw userUpdateError;
+            // Mettre à jour le projet
+            const project = projects.find(p => p.id == transaction.project_id);
+            if (project) {
+                const newCollectedAmount = (Number(project.collected) || 0) + transaction.amount;
+                await window.supabaseClient
+                    .from('projects')
+                    .update({ collected: newCollectedAmount })
+                    .eq('id', transaction.project_id);
+                
+                project.collected = newCollectedAmount;
+            }
 
-        // B. Mettre à jour la transaction (Statut)
-        const { error: transacUpdateError } = await window.supabaseClient
-            .from('transactions')
-            .update({ 
-                status: 'completed', 
-                validated_at: new Date().toISOString() 
-            })
-            .eq('id', transactionId);
-
-        if (transacUpdateError) throw transacUpdateError;
-
-        // C. Créer la ligne dans la table 'contributions' pour le dashboard
-        if (transaction.type === 'investment' || transaction.type === 'contribution') {
+            // Créer la ligne de contribution (si elle n'existe pas déjà)
             await window.supabaseClient
                 .from('contributions')
                 .insert([{
-                    id: transaction.id,
+                    id: transaction.id, // On garde le même ID pour éviter les doublons
                     member_id: member.id,
                     project_id: transaction.project_id,
                     amount: transaction.amount,
+                    payment_method: transaction.payment_method,
+                    status: 'completed',
                     created_at: new Date().toISOString()
                 }]);
+
+            showNotification(`Investissement de ${formatCFA(transaction.amount)} validé !`);
         }
 
-        // 4. Rafraîchir l'affichage
-        await refreshAdminDashboard();
-        showNotification('Validation réussie : Solde et transactions mis à jour !');
+        // 4. Mettre à jour le statut de la transaction
+        const { error: updateStatusError } = await window.supabaseClient
+            .from('transactions')
+            .update({ 
+                status: 'validated',
+                validated_at: new Date().toISOString()
+            })
+            .eq('id', transactionId);
 
+        if (updateStatusError) throw updateStatusError;
+
+        // 5. Nettoyage de l'interface et rechargement
+        if (typeof removeTransactionRow === "function") removeTransactionRow(transactionId);
+        pendingTransactions = pendingTransactions.filter(t => t.id !== transactionId);
+
+        // Rechargement des données pour synchroniser le dashboard
+        await loadPendingTransactions();
+        await loadProjects();
+        await loadContributions();
+        await loadUsers();
+        
+        // Mise à jour finale de l'affichage
+        if (currentUser && currentUser.email === 'elkas07@live.fr') {
+            updateAdminDashboard();
+        } else if (currentUser) {
+            updateMemberDashboard();
+        }
+        
+        console.log('✅ Transaction validée avec succès:', transactionId);
+        
     } catch (error) {
-        console.error('❌ Erreur critique lors de la validation:', error);
-        showNotification('Erreur technique lors de la validation', 'error');
+        console.error('❌ Erreur validation transaction:', error);
+        showNotification('Erreur lors de la validation: ' + error.message, 'error');
     }
 }
 
-                    // Mettre à jour le projet
-                    const project = projects.find(p => p.id == transaction.project_id);
-                    if (project) {
-                        const newCollectedAmount = (project.collected || 0) + transaction.amount;
-                        const { error: updateProjectError } = await window.supabaseClient
-                            .from('projects')
-                            .update({ collected: newCollectedAmount })
-                            .eq('id', transaction.project_id);
+                   async function validateTransaction(transactionId) {
+    // CORRECTION : Vérifier window.supabaseClient
+    if (!isSupabaseConnected || !window.supabaseClient) {
+        showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
+        return;
+    }
 
-                        if (updateProjectError) throw updateProjectError;
+    try {
+        console.log('✅ Validation de la transaction:', transactionId);
+        
+        // 1. Récupérer la transaction avec vérification du statut 'pending'
+        const { data: transaction, error: transactionError } = await window.supabaseClient
+            .from('transactions')
+            .select('*')
+            .eq('id', transactionId)
+            .eq('status', 'pending')
+            .single();
 
-                        project.collected = newCollectedAmount;
-                        
-                        // Vérifier si le projet est complet
-                        if (newCollectedAmount >= project.target) {
-                            project.status = 'completed';
-                        }
-                    }
-
-                    // Créer la contribution
-                    const { error: contributionError } = await window.supabaseClient
-                        .from('contributions')
-                        .insert([
-                            {
-                                member_id: member.id,
-                                project_id: transaction.project_id,
-                                amount: transaction.amount,
-                                payment_method: transaction.payment_method,
-                                status: 'completed',
-                                created_at: new Date().toISOString()
-                            }
-                        ]);
-
-                    if (contributionError) throw contributionError;
-
-                    showNotification(`Investissement de ${formatCFA(transaction.amount)} validé ! Projet mis à jour.`);
-                }
-
-                // 4. Mettre à jour le statut de la transaction en 'completed'
-                const { error: updateStatusError } = await window.supabaseClient
-                    .from('transactions')
-                    .update({ 
-                        status: 'validated',
-                        validated_at: new Date().toISOString(),
-                        rejected_at: null
-                    })
-                    .eq('id', transactionId);
-
-                if (updateStatusError) throw updateStatusError;
-
-                // 5. Retirer immédiatement la ligne du tableau
-                removeTransactionRow(transactionId);
-
-                // 6. Supprimer de la liste locale
-                pendingTransactions = pendingTransactions.filter(t => t.id !== transactionId);
-
-                // 7. Recharger les données
-                await loadPendingTransactions();
-                await loadProjects();
-                await loadContributions();
-                await loadUsers();
-                
-                // 8. Mettre à jour les dashboards
-                if (currentUser && currentUser.email === 'elkas07@live.fr') {
-                    updateAdminDashboard();
-                } else if (currentUser) {
-                    updateMemberDashboard();
-                }
-                
-                console.log('✅ Transaction validée avec succès:', transactionId);
-                
-            } catch (error) {
-                console.error('❌ Erreur validation transaction:', error);
-                showNotification('Erreur lors de la validation: ' + error.message, 'error');
-            }
+        if (transactionError || !transaction) {
+            console.error('❌ Transaction non trouvée ou déjà traitée:', transactionError);
+            showNotification('Cette transaction a déjà été traitée ou n\'existe pas.', 'error');
+            return;
         }
+
+        // ⭐ Nettoyage de l'ID du membre
+        const cleanId = String(transaction.member_id).replace(/"/g, '').trim();
+
+        // 2. Récupérer le membre
+        const { data: member, error: memberError } = await window.supabaseClient
+            .from('members')
+            .select('*')
+            .eq('id', cleanId)
+            .maybeSingle();
+
+        if (memberError || !member) {
+            console.error('❌ Membre non trouvé:', cleanId);
+            showNotification('Erreur: Impossible de récupérer le membre.', 'error');
+            return;
+        }
+
+        console.log('✅ Membre trouvé:', member.name);
+
+        // 3. Traiter selon le type de transaction
+        if (transaction.type === 'deposit') {
+            const newBalance = (Number(member.balance) || 0) + Number(transaction.amount);
+            const { error: updateError } = await window.supabaseClient
+                .from('members')
+                .update({ balance: newBalance })
+                .eq('id', member.id);
+
+            if (updateError) throw updateError;
+            showNotification(`Dépôt de ${formatCFA(transaction.amount)} validé !`);
+
+        } else if (transaction.type === 'investment' || transaction.type === 'contribution') {
+            
+            if ((Number(member.balance) || 0) < transaction.amount) {
+                showNotification('Solde insuffisant pour valider cet investissement', 'error');
+                return;
+            }
+
+            const newBalance = (Number(member.balance) || 0) - transaction.amount;
+            const newTotalInvested = (Number(member.total_invested) || 0) + transaction.amount;
+            
+            // 🔥 MISE À JOUR DU SOLDE DANS SUPABASE
+            const { error: updateBalanceError } = await window.supabaseClient
+                .from('members')
+                .update({ 
+                    balance: newBalance,
+                    total_invested: newTotalInvested
+                })
+                .eq('id', member.id);
+
+            if (updateBalanceError) throw updateBalanceError;
+
+            // Mettre à jour le projet
+            const project = projects.find(p => p.id == transaction.project_id);
+            if (project) {
+                const newCollectedAmount = (Number(project.collected) || 0) + transaction.amount;
+                await window.supabaseClient
+                    .from('projects')
+                    .update({ collected: newCollectedAmount })
+                    .eq('id', transaction.project_id);
+                
+                project.collected = newCollectedAmount;
+            }
+
+            // Créer la ligne de contribution (si elle n'existe pas déjà)
+            await window.supabaseClient
+                .from('contributions')
+                .insert([{
+                    id: transaction.id, // On garde le même ID pour éviter les doublons
+                    member_id: member.id,
+                    project_id: transaction.project_id,
+                    amount: transaction.amount,
+                    payment_method: transaction.payment_method,
+                    status: 'completed',
+                    created_at: new Date().toISOString()
+                }]);
+
+            showNotification(`Investissement de ${formatCFA(transaction.amount)} validé !`);
+        }
+
+        // 4. Mettre à jour le statut de la transaction
+        const { error: updateStatusError } = await window.supabaseClient
+            .from('transactions')
+            .update({ 
+                status: 'validated',
+                validated_at: new Date().toISOString()
+            })
+            .eq('id', transactionId);
+
+        if (updateStatusError) throw updateStatusError;
+
+        // 5. Nettoyage de l'interface et rechargement
+        if (typeof removeTransactionRow === "function") removeTransactionRow(transactionId);
+        pendingTransactions = pendingTransactions.filter(t => t.id !== transactionId);
+
+        // Rechargement des données pour synchroniser le dashboard
+        await loadPendingTransactions();
+        await loadProjects();
+        await loadContributions();
+        await loadUsers();
+        
+        // Mise à jour finale de l'affichage
+        if (currentUser && currentUser.email === 'elkas07@live.fr') {
+            updateAdminDashboard();
+        } else if (currentUser) {
+            updateMemberDashboard();
+        }
+        
+        console.log('✅ Transaction validée avec succès:', transactionId);
+        
+    } catch (error) {
+        console.error('❌ Erreur validation transaction:', error);
+        showNotification('Erreur lors de la validation: ' + error.message, 'error');
+    }
+}
 
         // ⭐⭐ CORRECTION CRITIQUE ⭐⭐ - Fonction rejectTransaction corrigée
         async function rejectTransaction(transactionId) {
