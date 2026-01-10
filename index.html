@@ -5724,118 +5724,88 @@ async function loadContributions() {
         }
 
      async function validateTransaction(transactionId) {
-    if (!isSupabaseConnected || !window.supabaseClient) {
-        showNotification('Mode hors ligne - Impossible de valider', 'warning');
-        return;
-    }
+    if (!window.supabaseClient) return;
 
     try {
-        console.log('✅ Validation de la transaction:', transactionId);
-        
+        console.log("🚀 Lancement validation pour:", transactionId);
+
         // 1. Récupérer la transaction
-        const { data: transaction, error: transactionError } = await window.supabaseClient
-            .from('transactions')
-            .select('*')
-            .eq('id', transactionId)
-            .eq('status', 'pending')
-            .single();
+        const { data: trx, error: te } = await window.supabaseClient
+            .from('transactions').select('*').eq('id', transactionId).single();
+        
+        if (te || !trx) throw new Error("Transaction introuvable");
 
-        if (transactionError || !transaction) {
-            showNotification('Transaction introuvable ou déjà traitée', 'error');
-            return;
-        }
+        // 2. Récupérer le membre (on s'assure que l'ID est bien formaté)
+        const memberId = String(trx.member_id).trim();
+        const { data: member, error: me } = await window.supabaseClient
+            .from('members').select('*').eq('id', memberId).single();
 
-        const cleanId = String(transaction.member_id).replace(/"/g, '').trim();
+        if (me || !member) throw new Error("Membre introuvable en base");
 
-        // 2. Récupérer le membre
-        const { data: member, error: memberError } = await window.supabaseClient
-            .from('members')
-            .select('*')
-            .eq('id', cleanId)
-            .maybeSingle();
+        // 3. Calculs mathématiques stricts
+        const amt = Number(trx.amount);
+        const oldBal = Number(member.balance) || 0;
+        const oldInv = Number(member.total_invested) || 0;
+        
+        let newBal = oldBal;
+        let newInv = oldInv;
 
-        if (memberError || !member) {
-            showNotification('Membre introuvable', 'error');
-            return;
-        }
-
-        // 3. Calculs de sécurité (Conversion forcée en Nombre)
-        const amount = Number(transaction.amount);
-        const currentBalance = Number(member.balance) || 0;
-        const currentInvested = Number(member.total_invested) || 0;
-
-        let updateData = {};
-
-        if (transaction.type === 'deposit') {
-            updateData = { balance: currentBalance + amount };
-        } else if (transaction.type === 'investment' || transaction.type === 'contribution') {
-            if (currentBalance < amount) {
-                showNotification('Solde insuffisant', 'error');
+        if (trx.type === 'deposit') {
+            newBal = oldBal + amt;
+        } else {
+            if (oldBal < amt) {
+                showNotification("Solde insuffisant !", "error");
                 return;
             }
-            updateData = { 
-                balance: currentBalance - amount,
-                total_invested: currentInvested + amount 
-            };
+            newBal = oldBal - amt;
+            newInv = oldInv + amt;
         }
 
-        // 🔥 MISE À JOUR SUPABASE (Membres)
-        const { error: updateMemError } = await window.supabaseClient
+        console.log(`📊 Calcul : ${oldBal} CFA -> ${newBal} CFA`);
+
+        // 4. Mise à jour de Supabase (L'ordre est important)
+        
+        // A. Mise à jour du Membre
+        const { error: upMemErr } = await window.supabaseClient
             .from('members')
-            .update(updateData)
+            .update({ balance: newBal, total_invested: newInv })
             .eq('id', member.id);
+        
+        if (upMemErr) throw upMemErr;
 
-        if (updateMemError) throw updateMemError;
-
-        // 🔥 MISE À JOUR TRANSACTION
+        // B. Mise à jour de la Transaction
         await window.supabaseClient
             .from('transactions')
             .update({ status: 'validated', validated_at: new Date().toISOString() })
             .eq('id', transactionId);
 
-        // 🔥 MISE À JOUR PROJET (si investissement)
-        if (transaction.type === 'investment' && transaction.project_id) {
-            const project = projects.find(p => p.id == transaction.project_id);
-            if (project) {
-                const newCollected = (Number(project.collected) || 0) + amount;
-                await window.supabaseClient
-                    .from('projects')
-                    .update({ collected: newCollected })
-                    .eq('id', transaction.project_id);
-                
-                // Créer la ligne de contribution
-                await window.supabaseClient.from('contributions').insert([{
-                    member_id: member.id,
-                    project_id: transaction.project_id,
-                    amount: amount,
-                    status: 'completed'
-                }]);
-            }
+        // C. Création de la contribution (si investissement)
+        if (trx.type !== 'deposit' && trx.project_id) {
+            await window.supabaseClient.from('contributions').insert([{
+                member_id: member.id,
+                project_id: trx.project_id,
+                amount: amt,
+                status: 'completed'
+            }]);
         }
 
-        // ✨ SYNCHRONISATION LOCALE (Pour que le solde change à l'écran)
+        // 5. MISE À JOUR LOCALE IMMÉDIATE
         if (currentUser && currentUser.id === member.id) {
-            currentUser.balance = updateData.balance;
-            if (updateData.total_invested) currentUser.total_invested = updateData.total_invested;
+            currentUser.balance = newBal;
+            currentUser.total_invested = newInv;
         }
 
-        // Rechargement complet
-        await loadProjects();
-        await loadContributions();
-        await loadUsers();
+        // Rafraîchir tout
+        await Promise.all([loadProjects(), loadContributions(), loadUsers()]);
         
-        // Rafraîchir l'interface
-        if (currentUser && currentUser.email === 'elkas07@live.fr') {
-            updateAdminDashboard();
-        } else {
-            updateMemberDashboard();
-        }
+        if (typeof updateAdminDashboard === "function") updateAdminDashboard();
+        if (typeof updateMemberDashboard === "function") updateMemberDashboard();
 
-        showNotification('Validation réussie ! Le solde a été mis à jour.');
-        
-    } catch (error) {
-        console.error('❌ Erreur:', error);
-        showNotification('Erreur technique : ' + error.message, 'error');
+        showNotification("Succès ! Solde mis à jour.");
+
+    } catch (err) {
+        console.error("❌ Erreur critique:", err);
+        showNotification("Erreur: " + err.message, "error");
     }
 }
         // ⭐⭐ CORRECTION CRITIQUE ⭐⭐ - Fonction rejectTransaction corrigée
