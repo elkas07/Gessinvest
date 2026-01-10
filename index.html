@@ -6028,67 +6028,44 @@ async function loadContributions() {
     
     showNotification('Dashboard et statut KYC actualisés !');
 }
-        async function refreshAdminDashboard() {
-    console.log('🔄 Chargement des données Supabase...'); // Message changé pour ne pas confondre
-    showNotification('Actualisation des données en cours...');
+      async function refreshAdminDashboard() {
+    console.log("🔄 Synchronisation complète des données Admin...");
     
-    // On recharge tout proprement
-    await Promise.all([
-        loadProjects(),
-        loadUsers(),
-        loadContributions(),
-        loadCommissions(),
-        loadPendingTransactions(),
-        loadKYCVerifications()
-    ]);
-    
-    // On appelle notre UNIQUE fonction de calcul (celle avec la cible 🎯)
-    updateAdminDashboard();
-    
-    showNotification('Dashboard admin actualisé avec succès !');
-}
+    // On affiche un petit message de chargement sur le bouton si tu veux
+    const refreshBtn = document.querySelector('.refresh-btn');
+    if (refreshBtn) refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
 
-        // ⭐⭐ CORRECTION 4 : Mise à jour des graphiques avec données réelles ⭐⭐
-        async function updateChartsWithRealData() {
-            if (!isSupabaseConnected || !window.supabaseClient) return;
-            
-            try {
-                // Récupérer les données réelles pour les graphiques
-                const { data: investmentsData } = await window.supabaseClient
-                    .from('transactions')
-                    .select('amount, created_at, type')
-                    .eq('status', 'validated')
-                    .eq('type', 'investment');
-                
-                const { data: usersData } = await window.supabaseClient
-                    .from('members')
-                    .select('created_at, role');
-                
-                const { data: projectsData } = await window.supabaseClient
-                    .from('projects')
-                    .select('status, collected, target');
-                
-                const { data: paymentsData } = await window.supabaseClient
-                    .from('transactions')
-                    .select('payment_method, type')
-                    .eq('status', 'validated');
-                
-                // Préparer les données pour les graphiques
-                const investmentsByMonth = prepareInvestmentsByMonth(investmentsData);
-                const usersByMonth = prepareUsersByMonth(usersData);
-                const projectsByStatus = prepareProjectsByStatus(projectsData);
-                const paymentsByMethod = preparePaymentsByMethod(paymentsData);
-                
-                // Mettre à jour les graphiques
-                updateInvestmentsChart(investmentsByMonth);
-                updateUsersChart(usersByMonth);
-                updateProjectsChart(projectsByStatus);
-                updatePaymentsChart(paymentsByMethod);
-                
-            } catch (error) {
-                console.error('❌ Erreur chargement données graphiques:', error);
-            }
+    try {
+        // On charge TOUT en parallèle : Profiles, KYC, et Contributions
+        const [userRes, kycRes, contribRes] = await Promise.all([
+            window.supabaseClient.from('profiles').select('id, name, email'),
+            window.supabaseClient.from('kyc_verifications').select('*'),
+            window.supabaseClient.from('contributions').select('*')
+        ]);
+
+        if (userRes.error) console.error("Erreur profils:", userRes.error);
+        if (kycRes.error) console.error("Erreur KYC:", kycRes.error);
+
+        // On remplit nos variables globales
+        users = userRes.data || [];
+        kycVerifications = kycRes.data || [];
+        contributions = contribRes.data || [];
+
+        console.log(`✅ Synchro terminée : ${users.length} membres et ${kycVerifications.length} KYC récupérés.`);
+
+        // On relance l'affichage des compteurs et du tableau
+        updateAdminDashboard();
+        if (typeof updateKYCManagementTable === "function") {
+            updateKYCManagementTable();
         }
+
+    } catch (err) {
+        console.error("❌ Erreur lors de l'actualisation:", err);
+    } finally {
+        // On remet le bouton à son état normal
+        if (refreshBtn) refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Actualiser';
+    }
+}
 
         function prepareInvestmentsByMonth(investmentsData) {
             const investmentsByMonth = {};
