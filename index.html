@@ -6029,31 +6029,44 @@ async function loadContributions() {
     showNotification('Dashboard et statut KYC actualisés !');
 }
       async function refreshAdminDashboard() {
-    console.log("🔄 Synchronisation forcée des données...");
+    console.log("🔄 Synchronisation complète des données Admin...");
+    
+    // On affiche un petit message de chargement sur le bouton si tu veux
+    const refreshBtn = document.querySelector('.refresh-btn');
+    if (refreshBtn) refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
 
     try {
-        // 1. On récupère les KYC et les profils (pour avoir les noms)
-        const { data: kycData } = await window.supabaseClient.from('kyc_verifications').select('*');
-        const { data: userData } = await window.supabaseClient.from('profiles').select('id, name, email');
+        // On charge TOUT en parallèle : Profiles, KYC, et Contributions
+        const [userRes, kycRes, contribRes] = await Promise.all([
+            window.supabaseClient.from('profiles').select('id, name, email'),
+            window.supabaseClient.from('kyc_verifications').select('*'),
+            window.supabaseClient.from('contributions').select('*')
+        ]);
 
-        // 2. On stocke dans les variables globales
-        if (kycData) kycVerifications = kycData;
-        if (userData) users = userData;
+        if (userRes.error) console.error("Erreur profils:", userRes.error);
+        if (kycRes.error) console.error("Erreur KYC:", kycRes.error);
 
-        console.log(`✅ Synchro : ${kycVerifications.length} KYC et ${users.length} profils.`);
+        // On remplit nos variables globales
+        users = userRes.data || [];
+        kycVerifications = kycRes.data || [];
+        contributions = contribRes.data || [];
 
-        // 3. On met à jour l'affichage
+        console.log(`✅ Synchro terminée : ${users.length} membres et ${kycVerifications.length} KYC récupérés.`);
+
+        // On relance l'affichage des compteurs et du tableau
         updateAdminDashboard();
         if (typeof updateKYCManagementTable === "function") {
             updateKYCManagementTable();
         }
-        
-        alert("Données actualisées avec succès !");
 
     } catch (err) {
-        console.error("Erreur synchro:", err);
+        console.error("❌ Erreur lors de l'actualisation:", err);
+    } finally {
+        // On remet le bouton à son état normal
+        if (refreshBtn) refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Actualiser';
     }
 }
+
         function prepareInvestmentsByMonth(investmentsData) {
             const investmentsByMonth = {};
             
