@@ -6538,11 +6538,9 @@ function updateAdminDashboard() {
     console.log("🎯 DASHBOARD UNIQUE - Mise à jour en cours...");
 
     // 1. SÉCURITÉ ANTI-DOUBLONS : On nettoie la liste des contributions
-    // On s'assure que chaque transaction n'est comptée qu'une seule fois
     const uniqueContributions = Array.from(new Map(contributions.map(c => [c.id, c])).values());
 
     // ⭐ CORRECTEUR DE PROJETS : Recalculer le 'collected' de chaque projet
-    // Cela corrige les montants multipliés sur les cartes des projets
     if (projects && projects.length > 0) {
         projects.forEach(project => {
             const sommeReelle = uniqueContributions
@@ -6572,23 +6570,23 @@ function updateAdminDashboard() {
         document.getElementById('adminPendingPayments').textContent = pendingTransactions.length;
     }
     
-    const pendingKYC = kycVerifications.filter(k => k.status === 'pending').length;
-    if (document.getElementById('adminPendingKYC')) {
-        document.getElementById('adminPendingKYC').textContent = pendingKYC;
+    // ⭐ CORRECTION KYC : C'est ici que le "0" de l'image change
+    const pendingKYC = kycVerifications ? kycVerifications.filter(k => k.status === 'pending').length : 0;
+    const kycElement = document.getElementById('adminPendingKYC') || document.getElementById('pendingKYCCount');
+    if (kycElement) {
+        kycElement.textContent = pendingKYC;
     }
     
     // 3. MISE À JOUR DES GRAPHES ET LISTES
     if (typeof updateChartsWithRealData === "function") updateChartsWithRealData();
     
     updateAdminPendingTransactions();
-    updateAdminProjectsList(); // ⭐ C'est ici que les cartes se dessinent avec le nouveau 'collected'
+    updateAdminProjectsList(); 
     updateAdminCommissionsList();
     updateAdminUsersList();
     updateAdminInvestmentsList();
     
     if (typeof updatePaymentCalendar === "function") updatePaymentCalendar();
-    
-    // Mettre à jour la pagination
     if (typeof updatePagination === "function") updatePagination();
 }
 
@@ -6602,7 +6600,99 @@ function updateAdminPendingTransactions() {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucune transaction en attente</td></tr>';
         return;
     }
+  
+    pendingTransactions.forEach(transaction => {
+        const user = users.find(u => u.id === transaction.member_id);
+        const project = transaction.project_id ? projects.find(p => p.id == transaction.project_id) : null;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${user ? user.name : 'Utilisateur inconnu'}</td>
+            <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
+            <td>${formatCFA(transaction.amount)}</td>
+            <td>${getPaymentMethodText(transaction.payment_method)}</td>
+            <td>${project ? project.name : 'N/A'}</td>
+            <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+            <td>
+                <div class="admin-actions">
+                    <button class="admin-btn btn-validate" onclick="validateTransaction('${transaction.id}')">
+                        <i class="fas fa-check"></i> Valider
+                    </button>
+                    <button class="admin-btn btn-delete" onclick="rejectTransaction('${transaction.id}')">
+                        <i class="fas fa-times"></i> Refuser
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+  function updateAdminDashboard() {
+    console.log("🎯 DASHBOARD UNIQUE - Mise à jour en cours...");
+
+    // 1. SÉCURITÉ ANTI-DOUBLONS : On nettoie la liste des contributions
+    const uniqueContributions = Array.from(new Map(contributions.map(c => [c.id, c])).values());
+
+    // ⭐ CORRECTEUR DE PROJETS : Recalculer le 'collected' de chaque projet
+    if (projects && projects.length > 0) {
+        projects.forEach(project => {
+            const sommeReelle = uniqueContributions
+                .filter(c => String(c.project_id) === String(project.id))
+                .reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+            
+            project.collected = sommeReelle;
+            console.log(`🔎 Vérification Projet [${project.id}]: ${sommeReelle} CFA`);
+        });
+    }
+
+    // 2. MISE À JOUR DES STATISTIQUES GLOBALES
+    if (document.getElementById('adminTotalUsers')) {
+        document.getElementById('adminTotalUsers').textContent = users.length;
+    }
+    if (document.getElementById('adminTotalProjects')) {
+        document.getElementById('adminTotalProjects').textContent = projects.length;
+    }
     
+    // Calcul de la somme totale réelle
+    const totalInvestments = uniqueContributions.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+    if (document.getElementById('adminTotalInvestments')) {
+        document.getElementById('adminTotalInvestments').textContent = formatCFA(totalInvestments);
+    }
+    
+    if (document.getElementById('adminPendingPayments')) {
+        document.getElementById('adminPendingPayments').textContent = pendingTransactions.length;
+    }
+    
+    // ⭐ CORRECTION KYC : C'est ici que le "0" de l'image change
+    const pendingKYC = kycVerifications ? kycVerifications.filter(k => k.status === 'pending').length : 0;
+    const kycElement = document.getElementById('adminPendingKYC') || document.getElementById('pendingKYCCount');
+    if (kycElement) {
+        kycElement.textContent = pendingKYC;
+    }
+    
+    // 3. MISE À JOUR DES GRAPHES ET LISTES
+    if (typeof updateChartsWithRealData === "function") updateChartsWithRealData();
+    
+    updateAdminPendingTransactions();
+    updateAdminProjectsList(); 
+    updateAdminCommissionsList();
+    updateAdminUsersList();
+    updateAdminInvestmentsList();
+    
+    if (typeof updatePaymentCalendar === "function") updatePaymentCalendar();
+    if (typeof updatePagination === "function") updatePagination();
+}
+
+function updateAdminPendingTransactions() {
+    const tbody = document.getElementById('adminPendingTransactions');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if (pendingTransactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucune transaction en attente</td></tr>';
+        return;
+    }
+  
     pendingTransactions.forEach(transaction => {
         const user = users.find(u => u.id === transaction.member_id);
         const project = transaction.project_id ? projects.find(p => p.id == transaction.project_id) : null;
