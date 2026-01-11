@@ -3682,39 +3682,63 @@
             }
 
             try {
-                const { data, error } = await window.supabaseClient
-                    .from('projects')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-                
-                if (error) {
-                    console.error('❌ Erreur chargement projets:', error);
-                    projects = getDefaultProjects();
-                    if (typeof renderProjects === 'function') renderProjects(projects);
-                    return;
-                }
-                
-                // On garde votre logique originale mais on ajoute le correcteur d'image (?t=...)
-                const rawData = data || [];
-                projects = rawData.map(p => ({
-                    ...p,
-                    image_url: p.image_url ? `${p.image_url}?t=${Date.now()}` : p.image_url
-                }));
+                async function updateProject(id) {
+            try {
+                const name = document.getElementById('edit-project-name').value;
+                const description = document.getElementById('edit-project-description').value;
+                const target = parseFloat(document.getElementById('edit-project-target').value);
+                const duration = parseInt(document.getElementById('edit-project-duration').value);
+                const status = document.getElementById('edit-project-status').value;
+                const imageFile = document.getElementById('edit-project-image').files[0];
 
-                console.log('✅ Projets chargés:', projects.length);
-                
-                // ⭐ CETTE LIGNE EST CRUCIALE : Elle envoie les données au Dashboard
-                if (typeof renderProjects === 'function') {
-                    renderProjects(projects);
+                let imageUrl = projects.find(p => p.id === id).image_url;
+
+                if (imageFile) {
+                    const fileExt = imageFile.name.split('.').pop();
+                    // ⭐ ON UTILISE UN NOM UNIQUE AVEC LA DATE POUR FORCER LE CHANGEMENT
+                    const fileName = `project_${Date.now()}.${fileExt}`;
+                    const filePath = `project-images/${fileName}`;
+
+                    const { error: uploadError } = await window.supabaseClient.storage
+                        .from('images') // Vérifiez que votre bucket s'appelle bien 'images'
+                        .upload(filePath, imageFile);
+
+                    if (uploadError) throw uploadError;
+
+                    const { data: urlData } = window.supabaseClient.storage
+                        .from('images')
+                        .getPublicUrl(filePath);
+                    
+                    imageUrl = urlData.publicUrl;
                 }
+
+                // Mise à jour dans la table
+                const { error: updateError } = await window.supabaseClient
+                    .from('projects')
+                    .update({
+                        name,
+                        description,
+                        target_amount: target,
+                        duration_months: duration,
+                        status,
+                        image_url: imageUrl,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', id);
+
+                if (updateError) throw updateError;
+
+                showNotification('Projet mis à jour avec succès');
+                closeModal('edit-project-modal');
+                
+                // ⭐ ON RECHARGE TOUT POUR ÊTRE SÛR
+                await loadProjects();
 
             } catch (error) {
-                console.error('❌ Erreur chargement projets:', error);
-                projects = getDefaultProjects();
-                if (typeof renderProjects === 'function') renderProjects(projects);
+                console.error('❌ Erreur modification projet:', error);
+                showNotification('Erreur lors de la modification: ' + error.message, 'error');
             }
         }
-
         // Charger les contributions
         async function loadContributions() {
             if (!isSupabaseConnected || !window.supabaseClient) {
