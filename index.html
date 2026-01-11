@@ -5544,15 +5544,21 @@
                 }
 
                 // 4. Mettre à jour le statut de la transaction
-                const { error: updateStatusError } = await window.supabaseClient
+               const { data: updateData, error: updateStatusError } = await window.supabaseClient
                     .from('transactions')
                     .update({ 
                         status: 'validated',
                         validated_at: new Date().toISOString()
                     })
-                    .eq('id', transactionId);
+                    .eq('id', transactionId)
+                    .select();
 
                 if (updateStatusError) throw updateStatusError;
+                
+                // Si la mise à jour n'a rien renvoyé, c'est que les droits RLS bloquent
+                if (!updateData || updateData.length === 0) {
+                    throw new Error("La mise à jour a échoué en base de données (vérifiez les permissions RLS).");
+                }
 
                 // 5. Retirer la ligne du tableau
                 removeTransactionRow(transactionId);
@@ -5576,7 +5582,6 @@
                 console.error('❌ Erreur validation transaction:', error);
                 showNotification('Erreur lors de la validation: ' + error.message, 'error');
             }
-        }
 
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une transaction
         async function rejectTransaction(transactionId) {
