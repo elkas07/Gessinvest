@@ -3682,61 +3682,49 @@
             }
 
             try {
-                async function updateProject(id) {
+                async function loadProjects() {
+            // 1. Vérification de la connexion
+            if (!isSupabaseConnected || !window.supabaseClient) {
+                console.log('🏗️ Chargement projets: mode hors ligne');
+                projects = typeof getDefaultProjects === 'function' ? getDefaultProjects() : [];
+                if (typeof renderProjects === 'function') renderProjects(projects);
+                return;
+            }
+
             try {
-                const name = document.getElementById('edit-project-name').value;
-                const description = document.getElementById('edit-project-description').value;
-                const target = parseFloat(document.getElementById('edit-project-target').value);
-                const duration = parseInt(document.getElementById('edit-project-duration').value);
-                const status = document.getElementById('edit-project-status').value;
-                const imageFile = document.getElementById('edit-project-image').files[0];
+                // 2. Récupération des données
+                const { data, error } = await window.supabaseClient
+                    .from('projects')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                if (error) {
+                    console.error('❌ Erreur chargement projets:', error);
+                    projects = typeof getDefaultProjects === 'function' ? getDefaultProjects() : [];
+                    if (typeof renderProjects === 'function') renderProjects(projects);
+                    return;
+                }
+                
+                // 3. Traitement des images (Correction du cache)
+                const rawData = data || [];
+                projects = rawData.map(p => ({
+                    ...p,
+                    image_url: p.image_url ? `${p.image_url}?t=${Date.now()}` : p.image_url
+                }));
 
-                let imageUrl = projects.find(p => p.id === id).image_url;
-
-                if (imageFile) {
-                    const fileExt = imageFile.name.split('.').pop();
-                    // ⭐ ON UTILISE UN NOM UNIQUE AVEC LA DATE POUR FORCER LE CHANGEMENT
-                    const fileName = `project_${Date.now()}.${fileExt}`;
-                    const filePath = `project-images/${fileName}`;
-
-                    const { error: uploadError } = await window.supabaseClient.storage
-                        .from('images') // Vérifiez que votre bucket s'appelle bien 'images'
-                        .upload(filePath, imageFile);
-
-                    if (uploadError) throw uploadError;
-
-                    const { data: urlData } = window.supabaseClient.storage
-                        .from('images')
-                        .getPublicUrl(filePath);
-                    
-                    imageUrl = urlData.publicUrl;
+                console.log('✅ Projets chargés:', projects.length);
+                
+                // 4. Affichage sur le dashboard (L'étape qui manquait peut-être)
+                if (typeof renderProjects === 'function') {
+                    renderProjects(projects);
                 }
 
-                // Mise à jour dans la table
-                const { error: updateError } = await window.supabaseClient
-                    .from('projects')
-                    .update({
-                        name,
-                        description,
-                        target_amount: target,
-                        duration_months: duration,
-                        status,
-                        image_url: imageUrl,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', id);
-
-                if (updateError) throw updateError;
-
-                showNotification('Projet mis à jour avec succès');
-                closeModal('edit-project-modal');
-                
-                // ⭐ ON RECHARGE TOUT POUR ÊTRE SÛR
-                await loadProjects();
-
             } catch (error) {
-                console.error('❌ Erreur modification projet:', error);
-                showNotification('Erreur lors de la modification: ' + error.message, 'error');
+                console.error('❌ Erreur critique loadProjects:', error);
+                // En cas d'erreur, on essaie quand même d'afficher ce qu'on peut
+                if (typeof renderProjects === 'function') {
+                    renderProjects(projects || []);
+                }
             }
         }
         // Charger les contributions
