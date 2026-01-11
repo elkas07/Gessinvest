@@ -3682,42 +3682,46 @@
             }
 
             try {
-                async function loadProjects() {
-            try {
-                if (!isSupabaseConnected || !window.supabaseClient) {
-                    console.log('🏗️ Chargement projets: mode hors ligne');
-                    projects = getDefaultProjects();
-                    if (typeof renderProjects === 'function') renderProjects(projects);
-                    return;
-                }
-
                 const { data, error } = await window.supabaseClient
-                    .from('projects')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-                
-                if (error) {
-                    console.error('❌ Erreur chargement projets:', error);
-                    projects = getDefaultProjects();
-                } else {
-                    // ⭐ CORRECTION CACHE : On ajoute le timestamp ici
-                    projects = (data || []).map(p => ({
-                        ...p,
-                        image_url: p.image_url ? `${p.image_url}?t=${Date.now()}` : p.image_url
-                    }));
-                    console.log('✅ Projets chargés:', projects.length);
-                }
+    .from('projects')
+    .select('*')
+    .order('created_at', { ascending: false });
 
-                // Affichage systématique
-                if (typeof renderProjects === 'function') {
-                    renderProjects(projects);
-                }
+if (error) {
+    console.error('❌ Erreur chargement projets:', error);
+    projects = getDefaultProjects();
+    if (typeof renderProjects === 'function') renderProjects(projects);
+    return;
+}
 
-            } catch (err) {
-                console.error('❌ Erreur critique loadProjects:', err);
-            }
-        }
-		
+const rawData = data || [];
+
+// Générer un timestamp global pour toutes les images (plus efficace)
+const globalCacheBuster = Date.now();
+// Ou générer un timestamp unique par session
+// const globalCacheBuster = sessionStorage.getItem('image_cache_buster') || Date.now();
+
+projects = rawData.map(p => {
+    // Si le projet a un champ updated_at, l'utiliser comme cache buster
+    const cacheBuster = p.updated_at ? 
+        new Date(p.updated_at).getTime() : 
+        globalCacheBuster;
+    
+    return {
+        ...p,
+        // Ajouter le cache buster à l'URL
+        image_url: p.image_url ? `${p.image_url}?t=${cacheBuster}` : p.image_url
+    };
+});
+
+console.log('✅ Projets chargés:', projects.length, 'Cache buster:', globalCacheBuster);
+
+// Stocker le cache buster pour une utilisation future
+sessionStorage.setItem('image_cache_buster', globalCacheBuster);
+
+if (typeof renderProjects === 'function') {
+    renderProjects(projects);
+}
         // Charger les contributions
         async function loadContributions() {
             if (!isSupabaseConnected || !window.supabaseClient) {
