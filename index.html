@@ -3683,16 +3683,14 @@
 
             try {
                 async function loadProjects() {
-            // 1. Vérification de la connexion
-            if (!isSupabaseConnected || !window.supabaseClient) {
-                console.log('🏗️ Chargement projets: mode hors ligne');
-                projects = typeof getDefaultProjects === 'function' ? getDefaultProjects() : [];
-                if (typeof renderProjects === 'function') renderProjects(projects);
-                return;
-            }
-
             try {
-                // 2. Récupération des données
+                if (!isSupabaseConnected || !window.supabaseClient) {
+                    console.log('🏗️ Chargement projets: mode hors ligne');
+                    projects = getDefaultProjects();
+                    if (typeof renderProjects === 'function') renderProjects(projects);
+                    return;
+                }
+
                 const { data, error } = await window.supabaseClient
                     .from('projects')
                     .select('*')
@@ -3700,33 +3698,26 @@
                 
                 if (error) {
                     console.error('❌ Erreur chargement projets:', error);
-                    projects = typeof getDefaultProjects === 'function' ? getDefaultProjects() : [];
-                    if (typeof renderProjects === 'function') renderProjects(projects);
-                    return;
+                    projects = getDefaultProjects();
+                } else {
+                    // ⭐ CORRECTION CACHE : On ajoute le timestamp ici
+                    projects = (data || []).map(p => ({
+                        ...p,
+                        image_url: p.image_url ? `${p.image_url}?t=${Date.now()}` : p.image_url
+                    }));
+                    console.log('✅ Projets chargés:', projects.length);
                 }
-                
-                // 3. Traitement des images (Correction du cache)
-                const rawData = data || [];
-                projects = rawData.map(p => ({
-                    ...p,
-                    image_url: p.image_url ? `${p.image_url}?t=${Date.now()}` : p.image_url
-                }));
 
-                console.log('✅ Projets chargés:', projects.length);
-                
-                // 4. Affichage sur le dashboard (L'étape qui manquait peut-être)
+                // Affichage systématique
                 if (typeof renderProjects === 'function') {
                     renderProjects(projects);
                 }
 
-            } catch (error) {
-                console.error('❌ Erreur critique loadProjects:', error);
-                // En cas d'erreur, on essaie quand même d'afficher ce qu'on peut
-                if (typeof renderProjects === 'function') {
-                    renderProjects(projects || []);
-                }
+            } catch (err) {
+                console.error('❌ Erreur critique loadProjects:', err);
             }
         }
+		
         // Charger les contributions
         async function loadContributions() {
             if (!isSupabaseConnected || !window.supabaseClient) {
