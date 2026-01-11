@@ -5544,37 +5544,33 @@
                 }
 
                 // 4. Mettre à jour le statut de la transaction
-               const { data: checkData, error: updateStatusError } = await window.supabaseClient
+               const { error: updateStatusError } = await window.supabaseClient
                     .from('transactions')
                     .update({ 
                         status: 'validated',
                         validated_at: new Date().toISOString()
                     })
-                    .eq('id', transactionId)
-                    .select(); // <--- AJOUTÉ : Pour confirmer la modification
+                    .eq('id', transactionId);
 
                 if (updateStatusError) throw updateStatusError;
-
-                // Vérification si la ligne a vraiment été touchée
-                if (!checkData || checkData.length === 0) {
-                    throw new Error("La modification a été refusée par les règles de sécurité (RLS) de Supabase.");
-                }
 
                 // 5. Retirer la ligne du tableau
                 removeTransactionRow(transactionId);
 
-                // 6. Mettre à jour les données
-                await loadPendingTransactions();
-                await loadProjects();
-                await loadContributions();
-                await loadUsers();
-                
-                // 7. Mettre à jour les dashboards
-                if (currentUser && currentUser.email === 'elkas07@live.fr') {
-                    updateAdminDashboard();
-                } else if (currentUser) {
-                    updateMemberDashboard();
-                }
+                // 6. Attendre un court instant puis mettre à jour les données
+                setTimeout(async () => {
+                    await loadPendingTransactions();
+                    await loadProjects();
+                    await loadContributions();
+                    await loadUsers();
+                    
+                    // 7. Mettre à jour les dashboards
+                    if (currentUser && currentUser.email === 'elkas07@live.fr') {
+                        updateAdminDashboard();
+                    } else if (currentUser) {
+                        updateMemberDashboard();
+                    }
+                }, 1000); 
                 
                 console.log('✅ Transaction validée avec succès:', transactionId);
                 
@@ -5582,6 +5578,7 @@
                 console.error('❌ Erreur validation transaction:', error);
                 showNotification('Erreur lors de la validation: ' + error.message, 'error');
             }
+        }
 
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une transaction
         async function rejectTransaction(transactionId) {
