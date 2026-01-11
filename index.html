@@ -3672,36 +3672,64 @@
         }
 
         // Charger les projets
-        async function loadProjects() {
-            if (!isSupabaseConnected || !window.supabaseClient) {
-                console.log('🏗️ Chargement projets: mode hors ligne');
-                projects = getDefaultProjects();
-                return;
-            }
-
+        async function updateProject(id) {
             try {
-                const { data, error } = await window.supabaseClient
-                    .from('projects')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-                
-                if (error) {
-                    console.error('❌ Erreur chargement projets:', error);
-                    projects = getDefaultProjects();
-                    return;
-                }
-                
-                // ⭐ LA SEULE MODIFICATION EST ICI :
-                // On ajoute un petit texte variable (?t=...) à la fin de l'URL pour forcer l'image à changer
-                projects = (data || []).map(p => ({
-                    ...p,
-                    image_url: p.image_url ? `${p.image_url}?t=${Date.now()}` : p.image_url
-                }));
+                const name = document.getElementById('edit-project-name').value;
+                const description = document.getElementById('edit-project-description').value;
+                const target = parseFloat(document.getElementById('edit-project-target').value);
+                const duration = parseInt(document.getElementById('edit-project-duration').value);
+                const status = document.getElementById('edit-project-status').value;
+                const imageFile = document.getElementById('edit-project-image').files[0];
 
-                console.log('✅ Projets chargés:', projects.length);
+                let imageUrl = projects.find(p => p.id === id).image_url;
+
+                // 1. Gestion de l'image si un nouveau fichier est sélectionné
+                if (imageFile) {
+                    const fileExt = imageFile.name.split('.').pop();
+                    const fileName = `${Math.random()}.${fileExt}`;
+                    const filePath = `project-images/${fileName}`;
+
+                    const { error: uploadError } = await window.supabaseClient.storage
+                        .from('images')
+                        .upload(filePath, imageFile);
+
+                    if (uploadError) throw uploadError;
+
+                    const { data: urlData } = window.supabaseClient.storage
+                        .from('images')
+                        .getPublicUrl(filePath);
+                    
+                    imageUrl = urlData.publicUrl;
+                }
+
+                // 2. Mise à jour des données dans la table 'projects'
+                const { error: updateError } = await window.supabaseClient
+                    .from('projects')
+                    .update({
+                        name,
+                        description,
+                        target_amount: target,
+                        duration_months: duration,
+                        status,
+                        image_url: imageUrl,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', id);
+
+                if (updateError) throw updateError;
+
+                // 3. Fermer le modal et rafraîchir proprement
+                closeModal('edit-project-modal');
+                showNotification('Projet mis à jour avec succès');
+                
+                // On attend un tout petit peu avant de recharger pour éviter l'erreur de connexion
+                setTimeout(() => {
+                    loadProjects();
+                }, 500);
+
             } catch (error) {
-                console.error('❌ Erreur chargement projets:', error);
-                projects = getDefaultProjects();
+                console.error('❌ Erreur modification projet:', error);
+                showNotification('Erreur lors de la modification', 'error');
             }
         }
 
