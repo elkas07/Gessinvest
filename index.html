@@ -4995,47 +4995,64 @@
         }
 
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Approuver une vérification KYC
-        async function approveKYC(kycId = null) {
+       async function approveKYC(kycId = null) {
+            // 1. Identification sécurisée du KYC
             const kyc = kycId ? kycVerifications.find(k => k.id === kycId) : currentViewingKYC;
-            if (!kyc) return;
+            
+            if (!kyc) {
+                console.error("❌ KYC non trouvé");
+                return;
+            }
 
             if (!confirm('Êtes-vous sûr de vouloir approuver cette vérification KYC ?')) {
                 return;
             }
 
             try {
-                // On récupère la note si elle existe
+                // 2. Récupération sécurisée de la note (évite les erreurs de connexion)
                 const noteElement = document.getElementById('kycAdminNote');
                 const note = noteElement ? noteElement.value : null;
                 
+                // 3. Mise à jour réelle dans Supabase
                 const { error } = await window.supabaseClient
                     .from('kyc_verifications')
                     .update({
-                        status: 'verified', // Vérifiez que c'est bien 'verified' et pas 'verified '
+                        status: 'verified',
                         updated_at: new Date().toISOString(),
                         reviewed_at: new Date().toISOString(),
-                        reviewer_notes: note
+                        reviewer_notes: note || null
                     })
                     .eq('id', kyc.id);
 
                 if (error) throw error;
 
-                // ⭐ RÉEL : On informe l'utilisateur et on recharge tout
+                // 4. Succès et rafraîchissement de l'interface
                 showNotification('Vérification KYC approuvée avec succès');
                 
-                // On attend que les données soient rechargées avant de fermer
-                await loadKYCVerifications(); 
-                
-                // On ferme l'affichage des détails
-                if (document.getElementById('kycDetailsContainer')) {
-                    document.getElementById('kycDetailsContainer').style.display = 'none';
+                // On recharge les données depuis la base
+                if (typeof loadKYCVerifications === 'function') {
+                    await loadKYCVerifications();
                 }
-                if (noteElement) noteElement.value = '';
+                
+                // On met à jour l'affichage
+                if (typeof updateAdminKYCList === 'function') {
+                    updateAdminKYCList();
+                }
+
+                // 5. Nettoyage de l'interface
+                const detailsContainer = document.getElementById('kycDetailsContainer');
+                if (detailsContainer) {
+                    detailsContainer.style.display = 'none';
+                }
+                if (noteElement) {
+                    noteElement.value = '';
+                }
 
             } catch (error) {
-                console.error('❌ Erreur approbation KYC réelle:', error);
-                showNotification('Erreur: ' + error.message, 'error');
+                console.error('❌ Erreur approbation KYC:', error);
+                showNotification('Erreur lors de l\'approbation: ' + error.message, 'error');
             }
+        }
 
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une vérification KYC
         async function rejectKYC(kycId = null) {
