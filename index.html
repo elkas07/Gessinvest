@@ -3735,84 +3735,67 @@
             }
         }
 
-     // 1. Charger les commissions
+     // 1. La fonction de chargement (Gardez celle-ci)
 async function loadCommissions() {
     console.log('--- Tentative de chargement des commissions ---');
-    
     if (!isSupabaseConnected || !window.supabaseClient) {
-        console.error('❌ Supabase non connecté');
         commissions = [];
-        displayCommissions("Connexion à la base de données impossible.");
+        displayCommissions();
         return;
     }
-
     try {
         const { data, error } = await window.supabaseClient
             .from('commissions')
             .select('*')
             .order('created_at', { ascending: false });
         
-        if (error) {
-            console.error('❌ Erreur Supabase:', error.message);
-            displayCommissions("Erreur Supabase : " + error.message);
-            return;
+        if (!error && data) {
+            commissions = data;
+            console.log('📊 Données reçues :', commissions);
+            displayCommissions(); // <--- On appelle l'affichage ici
         }
-
-        commissions = data || [];
-        console.log('📊 Données reçues :', commissions);
-        displayCommissions();
-
     } catch (err) {
-        console.error('❌ Erreur critique:', err);
-        displayCommissions("Erreur système : " + err.message);
+        console.error('❌ Erreur:', err);
     }
 }
 
-// 2. Affichage avec détection automatique de l'élément
-function displayCommissions(errorMessage = null) {
-    // On essaie de trouver le tableau par sa classe (vu sur votre image) ou par ID
-    const tableBody = document.querySelector('.dashboard-table tbody') || document.getElementById('commissions-table-body');
-    
+// 2. La fonction d'affichage CORRIGÉE pour votre Dashboard
+function displayCommissions() {
+    // Tentative de trouver le tableau par plusieurs sélecteurs possibles
+    const tableBody = document.querySelector('#commissionsTableBody') || 
+                      document.querySelector('.dashboard-table tbody') ||
+                      document.querySelector('table tbody'); // Sécurité ultime
+
     if (!tableBody) {
-        console.error("❌ Structure HTML introuvable : Vérifiez que vous avez un <tbody> dans votre table.");
+        console.error("❌ Structure HTML introuvable. Ajoutez id='commissionsTableBody' à votre <tbody>");
         return;
     }
 
-    // Cas d'erreur spécifique
-    if (errorMessage) {
-        tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: red; padding: 20px;">${errorMessage}</td></tr>`;
-        return;
-    }
-
-    // Cas où la table Supabase est vide
     if (commissions.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 20px;">Aucune commission trouvée dans la base de données.</td></tr>`;
+        tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">Aucune commission trouvée</td></tr>';
         return;
     }
 
-    // Remplissage normal
+    // Remplissage du tableau
     tableBody.innerHTML = commissions.map(comm => `
         <tr>
-            <td>${comm.project_title || 'Sans nom'}</td>
+            <td style="padding: 12px;">${comm.project_title || 'Projet'}</td>
             <td>${comm.rate || 0}%</td>
-            <td>${(comm.amount || 0).toLocaleString()} FCFA</td>
+            <td><strong>${(comm.amount || 0).toLocaleString()} FCFA</strong></td>
             <td>${(comm.collected_amount || 0).toLocaleString()} FCFA</td>
-            <td><span class="status-badge ${comm.status === 'paid' ? 'status-active' : 'status-pending'}">${comm.status === 'paid' ? 'Payé' : 'En attente'}</span></td>
-            <td><button class="btn-action" onclick="alert('ID: ${comm.id}')">Détails</button></td>
+            <td>
+                <span class="status-badge ${comm.status === 'paid' ? 'status-active' : 'status-pending'}" 
+                      style="padding: 4px 8px; border-radius: 4px; font-size: 0.8em; background: ${comm.status === 'paid' ? '#e6fffa' : '#fffaf0'}; color: ${comm.status === 'paid' ? '#2c7a7b' : '#9c4221'};">
+                    ${comm.status === 'paid' ? 'Payé' : 'En attente'}
+                </span>
+            </td>
+            <td>
+                <button class="btn-action" onclick="alert('Détails de la commission ID: ${comm.id}')">Voir</button>
+            </td>
         </tr>
     `).join('');
-}
-
-// 3. Charger les paramètres
-async function loadCommissionSettings() {
-    try {
-        const { data } = await window.supabaseClient
-            .from('platform_settings')
-            .select('*')
-            .eq('key', 'commission_settings')
-            .single();
-        if (data) commissionSettings = data.value;
-    } catch (e) { console.log("Pas de paramètres trouvés"); }
+    
+    console.log("✅ Tableau mis à jour avec les lignes.");
 }
 
         // Charger les utilisateurs avec pagination
