@@ -4997,37 +4997,66 @@
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Approuver une vérification KYC
      async function approveKYC(kycId = null) {
             console.log("🚀 Lancement de la validation RÉELLE..."); 
+            
+            // 1. Identification du KYC concerné
             const kyc = kycId ? kycVerifications.find(k => k.id === kycId) : currentViewingKYC;
             
-            if (!kyc) return;
-            if (!confirm('CONFIRMATION : Voulez-vous enregistrer cette validation en BASE DE DONNÉES ?')) return;
+            if (!kyc) {
+                console.error("❌ Impossible de trouver les données du KYC");
+                return;
+            }
+
+            if (!confirm('CONFIRMATION : Voulez-vous enregistrer cette validation en BASE DE DONNÉES ?')) {
+                return;
+            }
 
             try {
+                // 2. Préparation des données
                 const noteElement = document.getElementById('kycAdminNote');
                 const note = noteElement ? noteElement.value : null;
+                const now = new Date().toISOString();
                 
+                // 3. Envoi à Supabase
                 const { error } = await window.supabaseClient
                     .from('kyc_verifications')
                     .update({
                         status: 'verified',
-                        updated_at: new Date().toISOString(),
-                        reviewed_at: new Date().toISOString(),
+                        updated_at: now,
+                        reviewed_at: now,
                         reviewer_notes: note || null
                     })
                     .eq('id', kyc.id);
 
                 if (error) throw error;
 
-                // Message modifié pour prouver que le nouveau code tourne
+                // 4. MISE À JOUR LOCALE FORCÉE (Pour que la ligne disparaisse ou change d'état de suite)
+                const index = kycVerifications.findIndex(k => k.id === kyc.id);
+                if (index !== -1) {
+                    kycVerifications[index].status = 'verified';
+                }
+
+                // 5. Notification de succès réel
                 showNotification('✅ BASE DE DONNÉES MISE À JOUR : KYC validé');
                 
-                await loadKYCVerifications();
+                // 6. Rafraîchissement complet des données et de l'interface
+                if (typeof loadKYCVerifications === 'function') {
+                    await loadKYCVerifications();
+                }
                 
-                if (typeof updateAdminKYCList === 'function') updateAdminKYCList();
+                if (typeof updateAdminKYCList === 'function') {
+                    updateAdminKYCList();
+                }
 
+                // 7. Nettoyage et fermeture du panneau de détails
                 const detailsContainer = document.getElementById('kycDetailsContainer');
-                if (detailsContainer) detailsContainer.style.display = 'none';
-                if (noteElement) noteElement.value = '';
+                if (detailsContainer) {
+                    detailsContainer.style.display = 'none';
+                }
+                if (noteElement) {
+                    noteElement.value = '';
+                }
+
+                console.log('✅ Validation terminée pour:', kyc.id);
 
             } catch (error) {
                 console.error('❌ ERREUR SUPABASE:', error);
