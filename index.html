@@ -3735,12 +3735,14 @@
             }
         }
 
-     // 1. Charger les commissions depuis Supabase
+     // 1. Charger les commissions
 async function loadCommissions() {
+    console.log('--- Tentative de chargement des commissions ---');
+    
     if (!isSupabaseConnected || !window.supabaseClient) {
-        console.log('💰 Chargement commissions: mode hors ligne');
+        console.error('❌ Supabase non connecté');
         commissions = [];
-        displayCommissions(); // Affiche un message "hors ligne" ou vide
+        displayCommissions("Connexion à la base de données impossible.");
         return;
     }
 
@@ -3750,85 +3752,67 @@ async function loadCommissions() {
             .select('*')
             .order('created_at', { ascending: false });
         
-        if (!error && data) {
-            commissions = data;
-            console.log('✅ Commissions chargées:', commissions.length);
-        } else {
-            console.error('⚠️ Erreur Supabase:', error);
-            commissions = [];
+        if (error) {
+            console.error('❌ Erreur Supabase:', error.message);
+            displayCommissions("Erreur Supabase : " + error.message);
+            return;
         }
-    } catch (error) {
-        console.error('❌ Erreur critique lors du chargement des commissions:', error);
-        commissions = [];
+
+        commissions = data || [];
+        console.log('📊 Données reçues :', commissions);
+        displayCommissions();
+
+    } catch (err) {
+        console.error('❌ Erreur critique:', err);
+        displayCommissions("Erreur système : " + err.message);
     }
-    
-    // TRÈS IMPORTANT : Appelle la fonction d'affichage après le chargement
-    displayCommissions();
 }
 
-// 2. Fonction pour afficher les données dans le tableau HTML
-function displayCommissions() {
-    // On cible le corps du tableau (tbody)
+// 2. Affichage avec détection automatique de l'élément
+function displayCommissions(errorMessage = null) {
+    // On essaie de trouver le tableau par sa classe (vu sur votre image) ou par ID
     const tableBody = document.querySelector('.dashboard-table tbody') || document.getElementById('commissions-table-body');
     
     if (!tableBody) {
-        console.error("❌ Erreur : Impossible de trouver l'élément <tbody> dans le HTML.");
+        console.error("❌ Structure HTML introuvable : Vérifiez que vous avez un <tbody> dans votre table.");
         return;
     }
 
-    // Si aucune donnée n'est trouvée
-    if (!commissions || commissions.length === 0) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="6" style="text-align:center; padding: 30px; color: #718096;">
-                    Aucune commission enregistrée pour le moment.
-                </td>
-            </tr>`;
+    // Cas d'erreur spécifique
+    if (errorMessage) {
+        tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: red; padding: 20px;">${errorMessage}</td></tr>`;
         return;
     }
 
-    // On génère les lignes du tableau
+    // Cas où la table Supabase est vide
+    if (commissions.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 20px;">Aucune commission trouvée dans la base de données.</td></tr>`;
+        return;
+    }
+
+    // Remplissage normal
     tableBody.innerHTML = commissions.map(comm => `
         <tr>
-            <td><strong>${comm.project_title || 'Projet sans nom'}</strong></td>
+            <td>${comm.project_title || 'Sans nom'}</td>
             <td>${comm.rate || 0}%</td>
             <td>${(comm.amount || 0).toLocaleString()} FCFA</td>
             <td>${(comm.collected_amount || 0).toLocaleString()} FCFA</td>
-            <td>
-                <span class="status-badge ${comm.status === 'paid' ? 'status-active' : 'status-pending'}">
-                    ${comm.status === 'paid' ? 'Payé' : 'En attente'}
-                </span>
-            </td>
-            <td>
-                <button class="btn-action" onclick="viewCommissionDetails('${comm.id}')" style="cursor:pointer; padding: 5px 10px;">
-                    Détails
-                </button>
-            </td>
+            <td><span class="status-badge ${comm.status === 'paid' ? 'status-active' : 'status-pending'}">${comm.status === 'paid' ? 'Payé' : 'En attente'}</span></td>
+            <td><button class="btn-action" onclick="alert('ID: ${comm.id}')">Détails</button></td>
         </tr>
     `).join('');
 }
 
-// 3. Charger les paramètres de commission
+// 3. Charger les paramètres
 async function loadCommissionSettings() {
-    if (!isSupabaseConnected || !window.supabaseClient) {
-        console.log('⚙️ Chargement paramètres: mode hors ligne');
-        return;
-    }
-
     try {
-        const { data, error } = await window.supabaseClient
+        const { data } = await window.supabaseClient
             .from('platform_settings')
             .select('*')
             .eq('key', 'commission_settings')
             .single();
-        
-        if (!error && data && data.value) {
-            commissionSettings = data.value;
-            console.log('✅ Paramètres de commission récupérés');
-        }
-    } catch (error) {
-        console.error('❌ Erreur chargement paramètres commission:', error);
-    }
+        if (data) commissionSettings = data.value;
+    } catch (e) { console.log("Pas de paramètres trouvés"); }
 }
 
         // Charger les utilisateurs avec pagination
