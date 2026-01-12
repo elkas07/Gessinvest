@@ -4908,76 +4908,96 @@ function updateAdminKYCList() {
         }
 
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Voir les détails d'une vérification KYC
-        async function viewKYCVerification(kycId) {
+        /**
+         * Affiche les détails d'une vérification KYC et ses documents réels
+         * Remplace la version de simulation par la version connectée à Supabase
+         */
+        async function viewKYC(kycId) {
+            console.log('🔍 Visualisation réelle du KYC:', kycId);
+            
+            // 1. Recherche les données dans la liste des 46 KYC chargés
             const kyc = kycVerifications.find(k => k.id === kycId);
             if (!kyc) {
                 showNotification('Vérification KYC non trouvée', 'error');
                 return;
             }
 
+            // 2. Définit le KYC actuel pour les actions d'approbation/rejet
             currentViewingKYC = kyc;
-            const user = kyc.members || { name: 'Utilisateur inconnu', email: 'Email inconnu', phone: 'Non renseigné' };
             
-            // Mettre à jour les informations utilisateur
-            document.getElementById('kycUserInfo').innerHTML = `
-                <div class="user-details">
-                    <div class="detail-item">
-                        <div class="detail-label">Nom complet</div>
-                        <div class="detail-value">${user.name || 'Non renseigné'}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Email</div>
-                        <div class="detail-value">${user.email}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Téléphone</div>
-                        <div class="detail-value">${user.phone || 'Non renseigné'}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Statut KYC</div>
-                        <div class="detail-value">
-                            <span class="kyc-status kyc-${kyc.status.replace('_', '-')}">
-                                ${getKYCStatusText(kyc.status)}
-                            </span>
+            // 3. Récupère les infos membres (données liées ou directes)
+            const user = kyc.members || { 
+                full_name: kyc.full_name || 'Utilisateur inconnu', 
+                email: kyc.email || 'Email inconnu', 
+                phone: kyc.phone || 'Non renseigné' 
+            };
+            
+            // 4. Mise à jour de l'interface (Informations textuelles)
+            const userInfoElement = document.getElementById('kycUserInfo');
+            if (userInfoElement) {
+                userInfoElement.innerHTML = `
+                    <div class="user-details" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="detail-item">
+                            <div class="detail-label" style="font-weight: bold; color: #666;">Nom complet</div>
+                            <div class="detail-value">${user.full_name || user.name}</div>
                         </div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Type de document</div>
-                        <div class="detail-value">
-                            ${getDocumentTypeText(kyc.document_type)}
+                        <div class="detail-item">
+                            <div class="detail-label" style="font-weight: bold; color: #666;">Email</div>
+                            <div class="detail-value">${user.email}</div>
                         </div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Date de soumission</div>
-                        <div class="detail-value">${kyc.submitted_at ? new Date(kyc.submitted_at).toLocaleDateString() : 'N/A'}</div>
-                    </div>
-                </div>
-            `;
-
-            // Afficher le document
-            const documentContainer = document.getElementById('kycDocumentPreviewContainer');
-            if (kyc.documents && kyc.documents.length > 0) {
-                const document = kyc.documents[0];
-                const fileUrl = document.file_url;
-                const fileName = document.file_name;
-                
-                documentContainer.innerHTML = `
-                    <div style="margin-bottom: 15px;">
-                        <strong>Document:</strong> ${fileName}
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <button class="btn btn-primary" onclick="previewDocument('${fileUrl}', '${fileName}')">
-                            <i class="fas fa-eye"></i> Visualiser le document
-                        </button>
-                        <a href="${fileUrl}" target="_blank" class="btn btn-outline" style="margin-left: 10px;">
-                            <i class="fas fa-external-link-alt"></i> Ouvrir dans un nouvel onglet
-                        </a>
+                        <div class="detail-item">
+                            <div class="detail-label" style="font-weight: bold; color: #666;">Statut actuel</div>
+                            <div class="detail-value">
+                                <span class="badge-${kyc.status}">
+                                    ${kyc.status === 'pending' ? 'En attente' : kyc.status}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label" style="font-weight: bold; color: #666;">Date soumission</div>
+                            <div class="detail-value">${kyc.created_at ? new Date(kyc.created_at).toLocaleDateString() : 'N/A'}</div>
+                        </div>
                     </div>
                 `;
-            } else {
-                documentContainer.innerHTML = '<p>Aucun document disponible</p>';
             }
 
+            // 5. Gestion de l'affichage du document (Image du Bucket)
+            const documentContainer = document.getElementById('kycDocumentPreviewContainer');
+            if (documentContainer) {
+                // On utilise document_url s'il existe, sinon on cherche dans le tableau documents
+                const fileUrl = kyc.document_url || (kyc.documents && kyc.documents.length > 0 ? kyc.documents[0].file_url : null);
+                
+                if (fileUrl) {
+                    documentContainer.innerHTML = `
+                        <div style="margin-bottom: 15px; border: 1px solid #eee; padding: 10px; border-radius: 8px;">
+                            <div style="margin-bottom: 10px; font-weight: bold;">📄 Document d'identité :</div>
+                            <div style="text-align: center; background: #f9f9f9; padding: 10px;">
+                                <img src="${fileUrl}" alt="KYC Document" style="max-width: 100%; max-height: 400px; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                            </div>
+                            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                                <a href="${fileUrl}" target="_blank" class="btn btn-primary" style="text-decoration: none; padding: 8px 15px; background: #3b82f6; color: white; border-radius: 4px;">
+                                    <i class="fas fa-external-link-alt"></i> Ouvrir en grand
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    documentContainer.innerHTML = `
+                        <div style="padding: 20px; text-align: center; color: #ef4444; background: #fee2e2; border-radius: 8px;">
+                            <i class="fas fa-exclamation-triangle"></i> Aucun fichier trouvé dans le bucket kyc_documents.
+                        </div>
+                    `;
+                }
+            }
+
+            // 6. Affichage du volet (Modal)
+            const detailsPanel = document.getElementById('kycDetailsContainer');
+            if (detailsPanel) {
+                detailsPanel.style.display = 'block';
+                // Si vous utilisez une classe pour l'animation :
+                detailsPanel.classList.add('active'); 
+            }
+        }
             // Afficher les boutons d'action selon le statut
             document.getElementById('approveKYCBtn').style.display = kyc.status === 'pending' ? 'inline-block' : 'none';
             document.getElementById('rejectKYCBtn').style.display = kyc.status === 'pending' ? 'inline-block' : 'none';
