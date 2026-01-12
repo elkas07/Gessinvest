@@ -3735,14 +3735,17 @@
             }
         }
 
-     // 1. Charger les commissions
+     // 1. Charger les commissions depuis Supabase
 async function loadCommissions() {
     console.log('--- Tentative de chargement des commissions ---');
+    
     if (!isSupabaseConnected || !window.supabaseClient) {
+        console.log('💰 Chargement commissions: mode hors ligne');
         commissions = [];
         displayCommissions();
         return;
     }
+
     try {
         const { data, error } = await window.supabaseClient
             .from('commissions')
@@ -3751,63 +3754,80 @@ async function loadCommissions() {
         
         if (!error && data) {
             commissions = data;
-            console.log('📊 Données reçues :', commissions);
-            displayCommissions(); 
+            console.log('📊 Données reçues :', commissions.length);
+        } else {
+            console.error('❌ Erreur Supabase:', error);
+            commissions = [];
         }
-    } catch (err) {
-        console.error('❌ Erreur:', err);
+    } catch (error) {
+        console.error('❌ Erreur critique chargement commissions:', error);
+        commissions = [];
     }
+
+    // Appelle la fonction d'affichage après chaque chargement
+    displayCommissions();
 }
 
-// 2. Affichage (avec forçage de visibilité)
+// 2. Afficher les données dans le tableau HTML
 function displayCommissions() {
-    const tableBody = document.querySelector('#commissionsTableBody') || 
-                      document.querySelector('.dashboard-table tbody');
-
+    // On cible le tbody du tableau des commissions
+    const tableBody = document.getElementById('commissionsTableBody') || document.querySelector('.dashboard-table tbody');
+    
     if (!tableBody) {
-        console.error("❌ Structure HTML introuvable.");
+        console.error("❌ Élément de tableau introuvable dans le HTML.");
         return;
     }
 
-    if (commissions.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">Aucune commission trouvée</td></tr>';
+    // Si la liste est vide
+    if (!commissions || commissions.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">Aucune commission enregistrée</td></tr>';
         return;
     }
 
+    // Génération des lignes avec forçage de style pour la visibilité
     tableBody.innerHTML = commissions.map(comm => `
-        <tr style="display: table-row !important; visibility: visible !important;">
-            <td style="padding: 12px; color: #2d3748;"><strong>${comm.project_title || 'Projet'}</strong></td>
-            <td style="color: #2d3748;">${comm.rate || 0}%</td>
-            <td style="color: #2d3748;"><strong>${(comm.amount || 0).toLocaleString()} FCFA</strong></td>
-            <td style="color: #2d3748;">${(comm.collected_amount || 0).toLocaleString()} FCFA</td>
-            <td>
-                <span class="status-badge ${comm.status === 'paid' ? 'status-active' : 'status-pending'}" 
-                      style="padding: 4px 8px; border-radius: 4px; font-size: 0.8em; background: ${comm.status === 'paid' ? '#C6F6D5' : '#FEEBC8'}; color: ${comm.status === 'paid' ? '#22543D' : '#744210'};">
+        <tr style="border-bottom: 1px solid #eee; background-color: white !important;">
+            <td style="padding: 12px; color: #1a202c !important; font-weight: bold;">${comm.project_title || 'Projet'}</td>
+            <td style="padding: 12px; color: #1a202c !important;">${comm.rate || 0}%</td>
+            <td style="padding: 12px; color: #1a202c !important;">${(comm.amount || 0).toLocaleString()} FCFA</td>
+            <td style="padding: 12px; color: #1a202c !important;">${(comm.collected_amount || 0).toLocaleString()} FCFA</td>
+            <td style="padding: 12px;">
+                <span class="status-badge ${comm.status === 'paid' ? 'status-active' : 'status-pending'}"
+                      style="padding: 4px 8px; border-radius: 4px; font-size: 0.85em; 
+                             background: ${comm.status === 'paid' ? '#C6F6D5' : '#FEEBC8'}; 
+                             color: ${comm.status === 'paid' ? '#22543D' : '#744210'};">
                     ${comm.status === 'paid' ? 'Payé' : 'En attente'}
                 </span>
             </td>
-            <td>
-                <button class="btn-action" onclick="alert('ID: ${comm.id}')">Voir</button>
+            <td style="padding: 12px;">
+                <button class="btn-action" onclick="alert('Détails ID: ${comm.id}')" style="cursor:pointer;">Voir</button>
             </td>
         </tr>
     `).join('');
-    
-    console.log("✅ Tableau mis à jour avec les lignes.");
+
+    console.log("✅ Tableau mis à jour avec " + commissions.length + " lignes.");
 }
 
-// 3. RÉTABLIR LA FONCTION MANQUANTE (Pour supprimer l'erreur de la console)
+// 3. Charger les paramètres de commission
 async function loadCommissionSettings() {
-    console.log('⚙️ Chargement des paramètres...');
+    if (!isSupabaseConnected || !window.supabaseClient) {
+        console.log('⚙️ Chargement paramètres: mode hors ligne');
+        return;
+    }
+
     try {
-        if (!window.supabaseClient) return;
-        const { data } = await window.supabaseClient
+        const { data, error } = await window.supabaseClient
             .from('platform_settings')
             .select('*')
             .eq('key', 'commission_settings')
             .single();
-        if (data) commissionSettings = data.value;
-    } catch (e) {
-        console.log("Info: Pas de paramètres spécifiques trouvés.");
+        
+        if (!error && data && data.value) {
+            commissionSettings = data.value;
+            console.log('✅ Paramètres de commission chargés');
+        }
+    } catch (error) {
+        console.error('❌ Erreur chargement paramètres commission:', error);
     }
 }
 
