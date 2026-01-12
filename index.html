@@ -3735,52 +3735,101 @@
             }
         }
 
-        // Charger les commissions
-        async function loadCommissions() {
-            if (!isSupabaseConnected || !window.supabaseClient) {
-                console.log('💰 Chargement commissions: mode hors ligne');
-                commissions = [];
-                return;
-            }
+     // 1. Charger les commissions depuis Supabase
+async function loadCommissions() {
+    if (!isSupabaseConnected || !window.supabaseClient) {
+        console.log('💰 Chargement commissions: mode hors ligne');
+        commissions = [];
+        displayCommissions(); // Affiche un message "hors ligne" ou vide
+        return;
+    }
 
-            try {
-                const { data, error } = await window.supabaseClient
-                    .from('commissions')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-                
-                if (!error && data) {
-                    commissions = data;
-                } else {
-                    commissions = [];
-                }
-            } catch (error) {
-                console.error('❌ Erreur chargement commissions:', error);
-                commissions = [];
-            }
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('commissions')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (!error && data) {
+            commissions = data;
+            console.log('✅ Commissions chargées:', commissions.length);
+        } else {
+            console.error('⚠️ Erreur Supabase:', error);
+            commissions = [];
         }
+    } catch (error) {
+        console.error('❌ Erreur critique lors du chargement des commissions:', error);
+        commissions = [];
+    }
+    
+    // TRÈS IMPORTANT : Appelle la fonction d'affichage après le chargement
+    displayCommissions();
+}
 
-        // Charger les paramètres de commission
-        async function loadCommissionSettings() {
-            if (!isSupabaseConnected || !window.supabaseClient) {
-                console.log('⚙️ Chargement paramètres: mode hors ligne');
-                return;
-            }
+// 2. Fonction pour afficher les données dans le tableau HTML
+function displayCommissions() {
+    // On cible le corps du tableau (tbody)
+    const tableBody = document.querySelector('.dashboard-table tbody') || document.getElementById('commissions-table-body');
+    
+    if (!tableBody) {
+        console.error("❌ Erreur : Impossible de trouver l'élément <tbody> dans le HTML.");
+        return;
+    }
 
-            try {
-                const { data, error } = await window.supabaseClient
-                    .from('platform_settings')
-                    .select('*')
-                    .eq('key', 'commission_settings')
-                    .single();
-                
-                if (!error && data && data.value) {
-                    commissionSettings = data.value;
-                }
-            } catch (error) {
-                console.error('❌ Erreur chargement paramètres commission:', error);
-            }
+    // Si aucune donnée n'est trouvée
+    if (!commissions || commissions.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align:center; padding: 30px; color: #718096;">
+                    Aucune commission enregistrée pour le moment.
+                </td>
+            </tr>`;
+        return;
+    }
+
+    // On génère les lignes du tableau
+    tableBody.innerHTML = commissions.map(comm => `
+        <tr>
+            <td><strong>${comm.project_title || 'Projet sans nom'}</strong></td>
+            <td>${comm.rate || 0}%</td>
+            <td>${(comm.amount || 0).toLocaleString()} FCFA</td>
+            <td>${(comm.collected_amount || 0).toLocaleString()} FCFA</td>
+            <td>
+                <span class="status-badge ${comm.status === 'paid' ? 'status-active' : 'status-pending'}">
+                    ${comm.status === 'paid' ? 'Payé' : 'En attente'}
+                </span>
+            </td>
+            <td>
+                <button class="btn-action" onclick="viewCommissionDetails('${comm.id}')" style="cursor:pointer; padding: 5px 10px;">
+                    Détails
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 3. Charger les paramètres de commission
+async function loadCommissionSettings() {
+    if (!isSupabaseConnected || !window.supabaseClient) {
+        console.log('⚙️ Chargement paramètres: mode hors ligne');
+        return;
+    }
+
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('platform_settings')
+            .select('*')
+            .eq('key', 'commission_settings')
+            .single();
+        
+        if (!error && data && data.value) {
+            commissionSettings = data.value;
+            console.log('✅ Paramètres de commission récupérés');
         }
+    } catch (error) {
+        console.error('❌ Erreur chargement paramètres commission:', error);
+    }
+}
 
         // Charger les utilisateurs avec pagination
         async function loadUsers(page = 1, pageSize = 50, search = '', role = '', status = '', kycStatus = '') {
