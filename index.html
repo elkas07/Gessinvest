@@ -664,10 +664,6 @@
             border-radius: 12px;
             box-shadow: var(--shadow);
             background: white;
-            
-            /* CORRECTION 2: Ajout d'une hauteur maximale et défilement pour les tableaux de gestion */
-            max-height: 500px;
-            overflow-y: auto;
         }
 
         .dashboard-table {
@@ -692,9 +688,6 @@
             font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            position: sticky;
-            top: 0;
-            z-index: 10;
         }
 
         .dashboard-table tbody tr:hover {
@@ -1951,6 +1944,21 @@
                 border: 1px solid #ddd;
             }
         }
+
+        /* CORRECTION: Scrollable users table */
+        .scrollable-table-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 25px;
+            background: white;
+            box-shadow: var(--shadow);
+        }
+
+        .scrollable-table-container table {
+            margin-bottom: 0;
+        }
     </style>
 </head>
 <body>
@@ -2313,7 +2321,7 @@
                 <!-- Commission Management -->
                 <h3 style="margin-top: 40px;">Gestion des Commissions</h3>
                 <div class="dashboard-table-container">
-                    <table class="dashboard-table">
+                    <table class="dashboard-table" id="commissionsTable">
                         <thead>
                             <tr>
                                 <th>Projet</th>
@@ -2438,8 +2446,8 @@
                     </button>
                 </div>
 
-                <!-- Users Table -->
-                <div class="dashboard-table-container">
+                <!-- CORRECTION: Users Table avec barre de défilement -->
+                <div class="scrollable-table-container">
                     <table class="dashboard-table">
                         <thead>
                             <tr>
@@ -3742,14 +3750,14 @@
             }
         }
 
-        // ⭐⭐ CORRECTION 1/2 ⭐⭐ - Charger les commissions depuis Supabase
+        // CORRECTION: Charger et afficher les commissions
         async function loadCommissions() {
             console.log('--- Tentative de chargement des commissions ---');
             
             if (!isSupabaseConnected || !window.supabaseClient) {
                 console.log('💰 Chargement commissions: mode hors ligne');
                 commissions = [];
-                displayCommissions();
+                updateCommissionsDisplay();
                 return;
             }
 
@@ -3761,9 +3769,9 @@
                 
                 if (!error && data) {
                     commissions = data;
-                    console.log('📊 Données reçues :', commissions.length);
+                    console.log('📊 Données commissions reçues :', commissions.length);
                 } else {
-                    console.error('❌ Erreur Supabase:', error);
+                    console.error('❌ Erreur Supabase commissions:', error);
                     commissions = [];
                 }
             } catch (error) {
@@ -3771,33 +3779,41 @@
                 commissions = [];
             }
 
-            // Appelle la fonction d'affichage après chaque chargement
-            displayCommissions();
+            // Afficher les commissions
+            updateCommissionsDisplay();
         }
 
-        // ⭐⭐ CORRECTION 2/2 ⭐⭐ - Afficher les données dans le tableau HTML des commissions
-        function displayCommissions() {
-            // On cible le tbody du tableau des commissions (CORRECTION ICI)
+        // CORRECTION: Fonction pour afficher les commissions
+        function updateCommissionsDisplay() {
             const tableBody = document.getElementById('adminCommissionsList');
             
             if (!tableBody) {
-                console.error("❌ Élément de tableau des commissions introuvable dans le HTML.");
+                console.error("❌ Élément de tableau des commissions introuvable");
                 return;
             }
 
             // Si la liste est vide
             if (!commissions || commissions.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">Aucune commission enregistrée</td></tr>';
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align:center; padding:30px; color:#666;">
+                            <i class="fas fa-money-bill-wave" style="font-size: 2rem; margin-bottom: 15px; display: block; opacity: 0.3;"></i>
+                            Aucune commission enregistrée
+                            <br>
+                            <small>Les commissions seront calculées automatiquement lorsque les projets atteindront leurs objectifs.</small>
+                        </td>
+                    </tr>
+                `;
                 return;
             }
 
-            // Génération des lignes avec forçage de style pour la visibilité
+            // Génération des lignes du tableau
             tableBody.innerHTML = commissions.map(comm => `
                 <tr style="border-bottom: 1px solid #eee; background-color: white !important;">
-                    <td style="padding: 12px; color: #1a202c !important; font-weight: bold;">${comm.project_title || 'Projet'}</td>
+                    <td style="padding: 12px; color: #1a202c !important; font-weight: bold;">${comm.project_title || 'Projet sans nom'}</td>
                     <td style="padding: 12px; color: #1a202c !important;">${comm.rate || 0}%</td>
-                    <td style="padding: 12px; color: #1a202c !important;">${(comm.amount || 0).toLocaleString()} FCFA</td>
-                    <td style="padding: 12px; color: #1a202c !important;">${(comm.collected_amount || 0).toLocaleString()} FCFA</td>
+                    <td style="padding: 12px; color: #1a202c !important;">${formatCFA(comm.amount || 0)}</td>
+                    <td style="padding: 12px; color: #1a202c !important;">${formatCFA(comm.collected_amount || 0)}</td>
                     <td style="padding: 12px;">
                         <span class="status-badge ${comm.status === 'paid' ? 'status-active' : 'status-pending'}"
                               style="padding: 4px 8px; border-radius: 4px; font-size: 0.85em; 
@@ -3807,7 +3823,12 @@
                         </span>
                     </td>
                     <td style="padding: 12px;">
-                        <button class="btn-action" onclick="alert('Détails ID: ${comm.id}')" style="cursor:pointer;">Voir</button>
+                        <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${comm.project_id || ''}')">
+                            <i class="fas fa-edit"></i> Modifier
+                        </button>
+                        <button class="admin-btn btn-validate" onclick="markCommissionPaid('${comm.id}')" ${comm.status === 'paid' ? 'disabled style="opacity:0.5;"' : ''}>
+                            <i class="fas fa-check"></i> Marquer payé
+                        </button>
                     </td>
                 </tr>
             `).join('');
@@ -3815,7 +3836,35 @@
             console.log("✅ Tableau des commissions mis à jour avec " + commissions.length + " lignes.");
         }
 
-        // 3. Charger les paramètres de commission
+        // CORRECTION: Fonction pour marquer une commission comme payée
+        async function markCommissionPaid(commissionId) {
+            if (!isSupabaseConnected || !window.supabaseClient) {
+                showNotification('Mode hors ligne - Impossible de modifier la commission', 'warning');
+                return;
+            }
+
+            try {
+                const { error } = await window.supabaseClient
+                    .from('commissions')
+                    .update({ 
+                        status: 'paid',
+                        paid_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', commissionId);
+
+                if (error) throw error;
+
+                showNotification('Commission marquée comme payée');
+                await loadCommissions();
+                
+            } catch (error) {
+                console.error('❌ Erreur marquage commission payée:', error);
+                showNotification('Erreur: ' + error.message, 'error');
+            }
+        }
+
+        // Charger les paramètres de commission
         async function loadCommissionSettings() {
             if (!isSupabaseConnected || !window.supabaseClient) {
                 console.log('⚙️ Chargement paramètres: mode hors ligne');
@@ -3844,6 +3893,7 @@
                 console.log('👥 Chargement utilisateurs: mode hors ligne');
                 users = getDefaultUsers();
                 totalUserCount = users.length;
+                updateAdminUsersList();
                 return;
             }
 
@@ -3925,15 +3975,85 @@
                     loadingIndicator.classList.remove('active');
                 }
                 
+                // Mettre à jour la liste des utilisateurs
+                updateAdminUsersList();
+                updatePaginationControls();
+                
             } catch (error) {
                 console.error('❌ Erreur chargement utilisateurs:', error);
                 users = getDefaultUsers();
                 totalUserCount = users.length;
+                updateAdminUsersList();
                 const loadingIndicator = document.getElementById('usersLoading');
                 if (loadingIndicator) {
                     loadingIndicator.classList.remove('active');
                 }
             }
+        }
+
+        // CORRECTION: Mettre à jour la liste des utilisateurs avec le nouveau conteneur scrollable
+        function updateAdminUsersList() {
+            const tbody = document.getElementById('adminUsersList');
+            if (!tbody) return;
+            
+            if (users.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" style="text-align: center; padding: 30px;">
+                            <i class="fas fa-users" style="font-size: 2rem; margin-bottom: 15px; display: block; opacity: 0.3;"></i>
+                            Aucun utilisateur trouvé
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = users.map(user => {
+                // Trouver le statut KYC
+                const kycDoc = kycVerifications.find(k => k.user_id === user.id);
+                const kycStatus = kycDoc ? kycDoc.status : 'not_submitted';
+                const kycStatusText = getKYCStatusText(kycStatus);
+                const kycStatusClass = `kyc-${kycStatus.replace('_', '-')}`;
+                
+                return `
+                    <tr>
+                        <td>${user.name || 'Non renseigné'}</td>
+                        <td>${user.email}</td>
+                        <td>${user.phone || 'Non renseigné'}</td>
+                        <td>
+                            <span class="status-badge ${user.role === 'admin' ? 'status-active' : 'status-pending'}">
+                                ${user.role === 'admin' ? 'Administrateur' : 'Investisseur'}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="kyc-status ${kycStatusClass}">
+                                ${kycStatusText}
+                            </span>
+                        </td>
+                        <td>${formatCFA(user.total_invested || 0)}</td>
+                        <td>${formatCFA(user.balance || 0)}</td>
+                        <td>${user.created_at ? new Date(user.created_at).toLocaleDateString('fr-FR') : 'N/A'}</td>
+                        <td>
+                            <div class="admin-actions">
+                                <button class="admin-btn btn-edit" onclick="openUserDetailsModal('${user.id}')">
+                                    <i class="fas fa-eye"></i> Voir
+                                </button>
+                                <button class="admin-btn btn-edit" onclick="openEditUserModal('${user.id}')">
+                                    <i class="fas fa-edit"></i> Modifier
+                                </button>
+                                <button class="admin-btn btn-suspend" onclick="suspendUser('${user.id}')">
+                                    <i class="fas fa-pause"></i> Suspendre
+                                </button>
+                                ${kycDoc ? `
+                                <button class="admin-btn btn-validate" onclick="viewUserKYC('${user.id}')">
+                                    <i class="fas fa-id-card"></i> KYC
+                                </button>
+                                ` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         function getDefaultProjects() {
@@ -5051,7 +5171,7 @@
         }
 
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Approuver une vérification KYC
-     async function approveKYC(kycId = null) {
+        async function approveKYC(kycId = null) {
             console.log("🚀 Lancement de la validation RÉELLE..."); 
             
             // 1. Identification du KYC concerné
@@ -5119,7 +5239,7 @@
                 showNotification('Erreur réelle : ' + error.message, 'error');
             }
         }
-		
+        
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une vérification KYC
         async function rejectKYC(kycId = null) {
             const kyc = kycId ? kycVerifications.find(k => k.id === kycId) : currentViewingKYC;
@@ -6065,6 +6185,70 @@
             }
         }
 
+        // CORRECTION: Mettre à jour les contrôles de pagination
+        function updatePaginationControls() {
+            const totalPages = Math.ceil(totalUserCount / userPageSize);
+            const paginationInfo = document.getElementById('paginationInfo');
+            const paginationNumbers = document.getElementById('paginationNumbers');
+            
+            if (!paginationInfo || !paginationNumbers) return;
+            
+            // Mettre à jour les informations de pagination
+            const start = (currentUserPage - 1) * userPageSize + 1;
+            const end = Math.min(currentUserPage * userPageSize, totalUserCount);
+            
+            paginationInfo.textContent = `Affichage ${start}-${end} sur ${totalUserCount} utilisateurs`;
+            
+            // Générer les numéros de page
+            paginationNumbers.innerHTML = '';
+            
+            // Bouton Précédent
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'pagination-number';
+            prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+            prevBtn.disabled = currentUserPage === 1;
+            prevBtn.onclick = () => {
+                if (currentUserPage > 1) {
+                    currentUserPage--;
+                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+                }
+            };
+            paginationNumbers.appendChild(prevBtn);
+            
+            // Numéros de page
+            const maxPagesToShow = 5;
+            let startPage = Math.max(1, currentUserPage - Math.floor(maxPagesToShow / 2));
+            let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+            
+            if (endPage - startPage + 1 < maxPagesToShow) {
+                startPage = Math.max(1, endPage - maxPagesToShow + 1);
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.className = `pagination-number ${i === currentUserPage ? 'active' : ''}`;
+                pageBtn.textContent = i;
+                pageBtn.onclick = () => {
+                    currentUserPage = i;
+                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+                };
+                paginationNumbers.appendChild(pageBtn);
+            }
+            
+            // Bouton Suivant
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'pagination-number';
+            nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+            nextBtn.disabled = currentUserPage === totalPages;
+            nextBtn.onclick = () => {
+                if (currentUserPage < totalPages) {
+                    currentUserPage++;
+                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+                }
+            };
+            paginationNumbers.appendChild(nextBtn);
+        }
+
         // ⭐⭐ NOUVELLES FONCTIONS ⭐⭐ - Mise à jour des listes admin
 
         // Mettre à jour la liste des projets admin
@@ -6072,16 +6256,737 @@
             const tbody = document.getElementById('adminProjectsList');
             if (!tbody) return;
             
-            // Le reste de la fonction existe déjà dans votre code original
-            // Je ne le modifie pas pour éviter d'altérer la logique existante
+            if (projects.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 30px;">
+                            <i class="fas fa-project-diagram" style="font-size: 2rem; margin-bottom: 15px; display: block; opacity: 0.3;"></i>
+                            Aucun projet créé
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = projects.map(project => {
+                const progress = (project.collected / project.target) * 100;
+                return `
+                    <tr>
+                        <td>${project.name}</td>
+                        <td>${formatCFA(project.target)}</td>
+                        <td>${formatCFA(project.collected)}</td>
+                        <td>
+                            <div class="progress-bar" style="margin: 0;">
+                                <div class="progress" style="width: ${Math.min(progress, 100)}%"></div>
+                            </div>
+                            <div style="text-align: center; margin-top: 5px; font-size: 0.85rem;">
+                                ${Math.floor(progress)}%
+                            </div>
+                        </td>
+                        <td>
+                            <span class="status-badge ${project.status === 'active' ? 'status-active' : project.status === 'completed' ? 'status-completed' : 'status-pending'}">
+                                ${project.status === 'active' ? 'En cours' : project.status === 'completed' ? 'Terminé' : 'En attente'}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="admin-actions">
+                                <button class="admin-btn btn-edit" onclick="openEditProjectModal('${project.id}')">
+                                    <i class="fas fa-edit"></i> Modifier
+                                </button>
+                                <button class="admin-btn btn-delete" onclick="deleteProject('${project.id}')">
+                                    <i class="fas fa-trash"></i> Supprimer
+                                </button>
+                                <button class="admin-btn btn-validate" onclick="openEditProjectCommissionModal('${project.id}')">
+                                    <i class="fas fa-percentage"></i> Commission
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
-        // CORRECTION: La suite de votre code JavaScript reste exactement la même
-        // car seules les fonctions displayCommissions() et le CSS pour le défilement ont été modifiés
+        // CORRECTION: Mettre à jour les transactions en attente admin
+        function updateAdminPendingTransactions() {
+            const tbody = document.getElementById('adminPendingTransactions');
+            if (!tbody) return;
+            
+            if (pendingTransactions.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 30px;">
+                            <i class="fas fa-check-circle" style="font-size: 2rem; margin-bottom: 15px; display: block; color: var(--success-color); opacity: 0.3;"></i>
+                            Aucune transaction en attente de validation
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = pendingTransactions.map(transaction => {
+                const user = users.find(u => u.id === transaction.member_id);
+                const project = projects.find(p => p.id == transaction.project_id);
+                
+                return `
+                    <tr>
+                        <td>${user ? user.name : 'Utilisateur inconnu'}</td>
+                        <td>
+                            <span class="status-badge ${transaction.type === 'deposit' ? 'status-cash' : 'status-active'}">
+                                ${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}
+                            </span>
+                        </td>
+                        <td>${formatCFA(transaction.amount)}</td>
+                        <td>
+                            ${transaction.payment_method === 'cash' ? '💰 Espèces' : 
+                              transaction.payment_method === 'transfer' ? '🏦 Virement' : 
+                              transaction.payment_method === 'mobile_money' ? '📱 Mobile Money' : 
+                              '💳 Carte'}
+                        </td>
+                        <td>${project ? project.name : 'N/A'}</td>
+                        <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <div class="admin-actions">
+                                <button class="admin-btn btn-validate" onclick="validateTransaction('${transaction.id}')">
+                                    <i class="fas fa-check"></i> Valider
+                                </button>
+                                <button class="admin-btn btn-delete" onclick="rejectTransaction('${transaction.id}')">
+                                    <i class="fas fa-times"></i> Refuser
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
 
-        // ... (le reste de votre code JavaScript reste exactement le même)
-        // Note: Le code a été tronqué ici pour des raisons de longueur, mais il conserve toutes vos fonctions existantes
-        
+        // Mettre à jour le dashboard admin
+        function updateAdminDashboard() {
+            // Mettre à jour les statistiques
+            document.getElementById('adminTotalUsers').textContent = totalUserCount;
+            document.getElementById('adminTotalProjects').textContent = projects.length;
+            
+            const totalInvestments = projects.reduce((sum, project) => sum + (project.collected || 0), 0);
+            document.getElementById('adminTotalInvestments').textContent = formatCFA(totalInvestments);
+            
+            const pendingTransactionsCount = pendingTransactions.length;
+            document.getElementById('adminPendingPayments').textContent = pendingTransactionsCount;
+            
+            const pendingKYCCount = kycVerifications.filter(k => k.status === 'pending').length;
+            document.getElementById('adminPendingKYC').textContent = pendingKYCCount;
+            
+            // Mettre à jour les listes
+            updateAdminProjectsList();
+            updateAdminPendingTransactions();
+            updateCommissionsDisplay();
+            
+            // Vérifier les alertes
+            checkAdminAlerts();
+            
+            // Mettre à jour les graphiques
+            updateAdminCharts();
+        }
+
+        // Vérifier les alertes admin
+        function checkAdminAlerts() {
+            const alertsContainer = document.getElementById('adminAlerts');
+            const alertsContent = document.getElementById('alertsContent');
+            
+            if (!alertsContainer || !alertsContent) return;
+            
+            const alerts = [];
+            
+            // Vérifier les transactions en attente
+            if (pendingTransactions.length > 5) {
+                alerts.push(`${pendingTransactions.length} transactions en attente de validation`);
+            }
+            
+            // Vérifier les KYC en attente
+            const pendingKYC = kycVerifications.filter(k => k.status === 'pending').length;
+            if (pendingKYC > 3) {
+                alerts.push(`${pendingKYC} vérifications KYC en attente`);
+            }
+            
+            // Vérifier les projets bientôt terminés
+            const endingProjects = projects.filter(p => p.status === 'active' && p.days_left < 7);
+            if (endingProjects.length > 0) {
+                alerts.push(`${endingProjects.length} projet(s) se termine(nt) bientôt`);
+            }
+            
+            // Afficher ou masquer les alertes
+            if (alerts.length > 0) {
+                alertsContainer.style.display = 'block';
+                alertsContent.innerHTML = alerts.map(alert => `<p>• ${alert}</p>`).join('');
+            } else {
+                alertsContainer.style.display = 'none';
+            }
+        }
+
+        // Mettre à jour les graphiques admin
+        function updateAdminCharts() {
+            // Graphique des investissements
+            updateInvestmentsChart();
+            
+            // Graphique des projets
+            updateProjectsChart();
+            
+            // Graphique des utilisateurs
+            updateUsersChart();
+            
+            // Graphique des méthodes de paiement
+            updatePaymentsChart();
+        }
+
+        function updateInvestmentsChart() {
+            const ctx = document.getElementById('investmentsChart');
+            if (!ctx) return;
+            
+            // Données de démonstration
+            const labels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+            const data = [500000, 750000, 1200000, 950000, 1800000, 2200000, 1900000, 2400000, 2800000, 3200000, 3500000, 4000000];
+            
+            if (investmentsChart) {
+                investmentsChart.destroy();
+            }
+            
+            investmentsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Investissements (CFA)',
+                        data: data,
+                        borderColor: 'var(--accent-color)',
+                        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatCFA(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateProjectsChart() {
+            const ctx = document.getElementById('projectsChart');
+            if (!ctx) return;
+            
+            const activeProjects = projects.filter(p => p.status === 'active').length;
+            const completedProjects = projects.filter(p => p.status === 'completed').length;
+            const pendingProjects = projects.filter(p => p.status === 'pending').length;
+            
+            if (projectsChart) {
+                projectsChart.destroy();
+            }
+            
+            projectsChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Actifs', 'Terminés', 'En attente'],
+                    datasets: [{
+                        data: [activeProjects, completedProjects, pendingProjects],
+                        backgroundColor: [
+                            'var(--success-color)',
+                            'var(--accent-color)',
+                            'var(--warning-color)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateUsersChart() {
+            const ctx = document.getElementById('usersChart');
+            if (!ctx) return;
+            
+            // Données de démonstration pour la croissance des utilisateurs
+            const labels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+            const cumulativeData = [10, 25, 45, 70, 100, 135, 175, 220, 270, 325, 385, 450];
+            
+            if (usersChart) {
+                usersChart.destroy();
+            }
+            
+            usersChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Utilisateurs inscrits',
+                        data: cumulativeData,
+                        backgroundColor: 'rgba(13, 27, 42, 0.7)',
+                        borderColor: 'var(--primary-color)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 50
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updatePaymentsChart() {
+            const ctx = document.getElementById('paymentsChart');
+            if (!ctx) return;
+            
+            // Données de démonstration pour les méthodes de paiement
+            const paymentMethods = ['Espèces', 'Virement', 'Mobile Money', 'Carte'];
+            const paymentData = [35, 25, 30, 10];
+            
+            if (paymentsChart) {
+                paymentsChart.destroy();
+            }
+            
+            paymentsChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: paymentMethods,
+                    datasets: [{
+                        data: paymentData,
+                        backgroundColor: [
+                            '#4CAF50',
+                            '#2196F3',
+                            '#FF9800',
+                            '#9C27B0'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Mettre à jour le dashboard membre
+        function updateMemberDashboard() {
+            if (!currentUser) return;
+            
+            // Récupérer les données du membre
+            const member = users.find(u => u.email === currentUser.email);
+            if (!member) return;
+            
+            // Mettre à jour les informations personnelles
+            document.getElementById('memberWelcomeMessage').textContent = `Bonjour ${member.name || currentUser.email.split('@')[0]}, bienvenue dans votre espace investisseur`;
+            document.getElementById('memberBalance').textContent = formatCFA(member.balance || 0);
+            document.getElementById('totalInvested').textContent = formatCFA(member.total_invested || 0);
+            document.getElementById('availableBalance').textContent = formatCFA(member.balance || 0);
+            
+            // Calculer les gains estimés (simplifié)
+            const expectedReturn = (member.total_invested || 0) * 0.12; // 12% de rendement
+            document.getElementById('expectedReturn').textContent = formatCFA(expectedReturn);
+            
+            // Compter les projets actifs
+            const activeProjectsCount = contributions.filter(c => c.member_id === member.id && c.status === 'completed').length;
+            document.getElementById('activeProjects').textContent = activeProjectsCount;
+            
+            // Mettre à jour la liste des investissements
+            updateMemberInvestments(member.id);
+            
+            // Mettre à jour les transactions en attente
+            updateMemberPendingTransactions(member.id);
+            
+            // Mettre à jour le statut KYC
+            updateKYCStatusDisplay();
+        }
+
+        function updateMemberInvestments(memberId) {
+            const tbody = document.getElementById('memberInvestments');
+            if (!tbody) return;
+            
+            const memberInvestments = contributions.filter(c => c.member_id === memberId);
+            
+            if (memberInvestments.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 30px;">
+                            <i class="fas fa-chart-line" style="font-size: 2rem; margin-bottom: 15px; display: block; opacity: 0.3;"></i>
+                            Aucun investissement effectué
+                            <br>
+                            <small>Commencez à investir dès maintenant !</small>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = memberInvestments.map(investment => {
+                const project = projects.find(p => p.id == investment.project_id);
+                const expectedReturn = investment.amount * 0.12; // 12% de rendement estimé
+                
+                return `
+                    <tr>
+                        <td>${project ? project.name : 'Projet inconnu'}</td>
+                        <td>${formatCFA(investment.amount)}</td>
+                        <td>${new Date(investment.created_at).toLocaleDateString()}</td>
+                        <td>
+                            ${investment.payment_method === 'cash' ? '💰 Espèces' : 
+                              investment.payment_method === 'transfer' ? '🏦 Virement' : 
+                              investment.payment_method === 'mobile_money' ? '📱 Mobile Money' : 
+                              '💳 Carte'}
+                        </td>
+                        <td>
+                            <span class="status-badge ${investment.status === 'completed' ? 'status-active' : 'status-pending'}">
+                                ${investment.status === 'completed' ? 'Terminé' : 'En attente'}
+                            </span>
+                        </td>
+                        <td>${formatCFA(expectedReturn)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateMemberPendingTransactions(memberId) {
+            const tbody = document.getElementById('memberPendingTransactions');
+            if (!tbody) return;
+            
+            const memberTransactions = pendingTransactions.filter(t => t.member_id === memberId);
+            
+            if (memberTransactions.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 30px;">
+                            <i class="fas fa-check-circle" style="font-size: 2rem; margin-bottom: 15px; display: block; color: var(--success-color); opacity: 0.3;"></i>
+                            Aucune transaction en attente
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = memberTransactions.map(transaction => {
+                return `
+                    <tr>
+                        <td>
+                            <span class="status-badge ${transaction.type === 'deposit' ? 'status-cash' : 'status-active'}">
+                                ${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}
+                            </span>
+                        </td>
+                        <td>${formatCFA(transaction.amount)}</td>
+                        <td>
+                            ${transaction.payment_method === 'cash' ? '💰 Espèces' : 
+                              transaction.payment_method === 'transfer' ? '🏦 Virement' : 
+                              transaction.payment_method === 'mobile_money' ? '📱 Mobile Money' : 
+                              '💳 Carte'}
+                        </td>
+                        <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <span class="status-badge status-pending">
+                                En attente
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Fonctions pour les filtres avancés
+        function toggleAdvancedFilters() {
+            const filters = document.getElementById('advancedFilters');
+            if (filters) {
+                filters.classList.toggle('active');
+            }
+        }
+
+        function applyAdvancedFilters() {
+            // Récupérer les valeurs des filtres
+            advancedFilters.dateStart = document.getElementById('filterDateStart').value;
+            advancedFilters.dateEnd = document.getElementById('filterDateEnd').value;
+            advancedFilters.minInvestment = document.getElementById('filterMinInvestment').value;
+            advancedFilters.maxInvestment = document.getElementById('filterMaxInvestment').value;
+            advancedFilters.project = document.getElementById('filterProject').value;
+            advancedFilters.paymentMethod = document.getElementById('filterPaymentMethod').value;
+            advancedFilters.sortBy = document.getElementById('filterSortBy').value;
+            
+            // Recharger les utilisateurs avec les nouveaux filtres
+            loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            
+            showNotification('Filtres appliqués avec succès');
+        }
+
+        function resetAdvancedFilters() {
+            // Réinitialiser les champs
+            document.getElementById('filterDateStart').value = '';
+            document.getElementById('filterDateEnd').value = '';
+            document.getElementById('filterMinInvestment').value = '';
+            document.getElementById('filterMaxInvestment').value = '';
+            document.getElementById('filterProject').value = '';
+            document.getElementById('filterPaymentMethod').value = '';
+            document.getElementById('filterSortBy').value = 'created_at_desc';
+            
+            // Réinitialiser l'objet de filtres
+            advancedFilters = {
+                dateStart: '',
+                dateEnd: '',
+                minInvestment: '',
+                maxInvestment: '',
+                project: '',
+                paymentMethod: '',
+                sortBy: 'created_at_desc'
+            };
+            
+            // Recharger les utilisateurs
+            loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            
+            showNotification('Filtres réinitialisés');
+        }
+
+        // Fonctions de rafraîchissement
+        function refreshAdminDashboard() {
+            showNotification('Rafraîchissement du dashboard admin...');
+            updateAdminDashboard();
+        }
+
+        function refreshMemberDashboard() {
+            showNotification('Rafraîchissement de votre espace...');
+            updateMemberDashboard();
+        }
+
+        // Fonctions d'export
+        function exportAdminData() {
+            openModal('exportDataModal');
+        }
+
+        function generateExport() {
+            // Simulation d'export
+            showNotification('Génération de l\'export en cours...');
+            setTimeout(() => {
+                showNotification('Export généré avec succès !');
+                closeModal('exportDataModal');
+            }, 2000);
+        }
+
+        // Fonctions du calendrier de paiement
+        function updatePaymentCalendar() {
+            // Simulation du calendrier
+            const calendar = document.getElementById('paymentCalendar');
+            if (!calendar) return;
+            
+            calendar.innerHTML = `
+                <div class="calendar-day calendar-day-header">Lun</div>
+                <div class="calendar-day calendar-day-header">Mar</div>
+                <div class="calendar-day calendar-day-header">Mer</div>
+                <div class="calendar-day calendar-day-header">Jeu</div>
+                <div class="calendar-day calendar-day-header">Ven</div>
+                <div class="calendar-day calendar-day-header">Sam</div>
+                <div class="calendar-day calendar-day-header">Dim</div>
+                
+                ${Array.from({length: 35}, (_, i) => {
+                    const day = i + 1;
+                    const hasPayment = day % 7 === 0 || day % 5 === 0;
+                    return `<div class="calendar-day ${hasPayment ? 'has-payment' : ''}">${day}</div>`;
+                }).join('')}
+            `;
+        }
+
+        function refreshPaymentCalendar() {
+            showNotification('Calendrier des paiements rafraîchi');
+            updatePaymentCalendar();
+        }
+
+        // Configuration des écouteurs d'événements
+        function setupEventListeners() {
+            // Formulaire de connexion
+            document.getElementById('loginForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const email = document.getElementById('login-email').value;
+                const password = document.getElementById('login-password').value;
+                login(email, password);
+            });
+
+            // Formulaire d'inscription
+            document.getElementById('registrationForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const name = document.getElementById('reg-name').value;
+                const email = document.getElementById('reg-email').value;
+                const phone = document.getElementById('reg-phone').value;
+                const password = document.getElementById('reg-password').value;
+                const confirmPassword = document.getElementById('reg-confirm-password').value;
+                
+                if (password !== confirmPassword) {
+                    showNotification('Les mots de passe ne correspondent pas', 'error');
+                    return;
+                }
+                
+                register(name, email, password, phone);
+            });
+
+            // Formulaire d'ajout de fonds
+            document.getElementById('addFundsForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                processAddFunds();
+            });
+
+            // Formulaire de mot de passe oublié
+            document.getElementById('forgotPasswordForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                processForgotPassword();
+            });
+
+            // Simulateur
+            setupSimulator();
+
+            // Gestion des montants
+            document.getElementById('fundsAmount')?.addEventListener('input', updateFundsAmountDisplay);
+            document.getElementById('investmentAmount')?.addEventListener('input', updateAmountDisplay);
+
+            // Configuration de l'upload d'image
+            setupImageUpload();
+
+            // Recherche d'utilisateurs
+            document.getElementById('userSearch')?.addEventListener('input', function(e) {
+                userSearchTerm = e.target.value;
+                currentUserPage = 1;
+                loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            // Filtres d'utilisateurs
+            document.getElementById('userRoleFilter')?.addEventListener('change', function(e) {
+                userRoleFilter = e.target.value;
+                currentUserPage = 1;
+                loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            document.getElementById('userStatusFilter')?.addEventListener('change', function(e) {
+                userStatusFilter = e.target.value;
+                currentUserPage = 1;
+                loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            document.getElementById('userKYCStatusFilter')?.addEventListener('change', function(e) {
+                userKYCStatusFilter = e.target.value;
+                currentUserPage = 1;
+                loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            // Taille de page
+            document.getElementById('userPageSize')?.addEventListener('change', function(e) {
+                userPageSize = parseInt(e.target.value);
+                currentUserPage = 1;
+                loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            // Période d'export personnalisée
+            document.getElementById('exportPeriod')?.addEventListener('change', function(e) {
+                const customContainer = document.getElementById('customPeriodContainer');
+                if (e.target.value === 'custom') {
+                    customContainer.style.display = 'block';
+                } else {
+                    customContainer.style.display = 'none';
+                }
+            });
+        }
+
+        // Configuration du menu mobile
+        function setupMobileMenu() {
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+            const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
+            const navLinks = document.getElementById('navLinks');
+            
+            if (mobileMenuBtn && navLinks) {
+                mobileMenuBtn.addEventListener('click', function() {
+                    this.classList.toggle('active');
+                    navLinks.classList.toggle('active');
+                    mobileMenuOverlay.classList.toggle('active');
+                });
+                
+                mobileMenuOverlay.addEventListener('click', function() {
+                    mobileMenuBtn.classList.remove('active');
+                    navLinks.classList.remove('active');
+                    this.classList.remove('active');
+                });
+            }
+        }
+
+        function closeMobileMenu() {
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+            const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
+            const navLinks = document.getElementById('navLinks');
+            
+            if (mobileMenuBtn && navLinks) {
+                mobileMenuBtn.classList.remove('active');
+                navLinks.classList.remove('active');
+                mobileMenuOverlay.classList.remove('active');
+            }
+        }
+
+        // Fonction de notification
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            const messageElement = document.getElementById('notification-message');
+            const icon = notification.querySelector('i');
+            
+            if (!notification || !messageElement) return;
+            
+            // Mettre à jour le message et le type
+            messageElement.textContent = message;
+            notification.className = 'notification ' + type;
+            
+            // Changer l'icône selon le type
+            if (type === 'error') {
+                icon.className = 'fas fa-exclamation-circle';
+            } else if (type === 'warning') {
+                icon.className = 'fas fa-exclamation-triangle';
+            } else {
+                icon.className = 'fas fa-check-circle';
+            }
+            
+            // Afficher la notification
+            notification.style.display = 'flex';
+            
+            // Masquer automatiquement après 5 secondes
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 5000);
+        }
     </script>
 </body>
 </html>
