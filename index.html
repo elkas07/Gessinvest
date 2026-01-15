@@ -6928,72 +6928,109 @@ document.getElementById('editProjectForm').onsubmit = function(e) {
             });
         }
 
-        // Exporter les données
+       // ⭐ VERSION CORRIGÉE : EXPORTATION ET CALENDRIER ⭐
+        
         function exportAdminData() {
             openModal('exportDataModal');
         }
 
-        function generateExport() {
+        async function generateExport() {
             const format = document.querySelector('input[name="exportFormat"]:checked').value;
             const period = document.getElementById('exportPeriod').value;
             
             showNotification(`Génération de l'export ${format.toUpperCase()} en cours...`);
             
-            // Simuler la génération
-            setTimeout(() => {
-                showNotification(`Export ${format.toUpperCase()} généré avec succès`);
-                closeModal('exportDataModal');
-                
-                // Créer un lien de téléchargement simulé
-                const data = 'Simulated export data';
-                const blob = new Blob([data], { type: 'text/plain' });
+            try {
+                // 1. Préparation des données réelles issues de Supabase
+                let content = "";
+                let fileName = `export-gessinvest-${new Date().toISOString().split('T')[0]}`;
+                let mimeType = 'text/plain';
+
+                if (format === 'csv' || format === 'xlsx') {
+                    // Format Tableur (CSV)
+                    content = "Type;Nom/Email;Détails;Montant\n";
+                    // Ajout des projets
+                    projects.forEach(p => {
+                        content += `Projet;${p.name};${p.location};${p.target}\n`;
+                    });
+                    // Ajout des utilisateurs
+                    users.forEach(u => {
+                        content += `Utilisateur;${u.email};${u.role};-\n`;
+                    });
+                    mimeType = 'text/csv;charset=utf-8;';
+                    fileName += ".csv";
+                } else {
+                    // Format PDF (Rapport textuel pour éviter les erreurs de bibliothèque)
+                    content = "RAPPORT D'ACTIVITÉ GESSINVEST\n";
+                    content += "============================\n";
+                    content += `Généré le : ${new Date().toLocaleString()}\n\n`;
+                    
+                    content += "--- PROJETS ---\n";
+                    projects.forEach(p => {
+                        content += `- ${p.name} (${p.status}): ${p.collected} / ${p.target} CFA\n`;
+                    });
+                    
+                    content += "\n--- UTILISATEURS ---\n";
+                    users.forEach(u => {
+                        content += `- ${u.full_name || u.email} [${u.role}]\n`;
+                    });
+                    
+                    mimeType = 'text/plain';
+                    fileName += ".txt"; // On utilise .txt car le format "Simulated PDF" bloquait l'ouverture
+                }
+
+                // 2. Création et téléchargement du fichier
+                const blob = new Blob([content], { type: mimeType });
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `export-gessinvest-${new Date().toISOString().split('T')[0]}.${format}`;
+                a.download = fileName;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 window.URL.revokeObjectURL(url);
-            }, 2000);
+
+                showNotification(`Export ${format.toUpperCase()} généré avec succès`);
+                closeModal('exportDataModal');
+
+            } catch (error) {
+                console.error("❌ Erreur export:", error);
+                showNotification("Erreur lors de la génération de l'export", "error");
+            }
         }
 
         // Calendrier des paiements
         function updatePaymentCalendar() {
             const monthSelect = document.getElementById('paymentCalendarMonth');
+            if (!monthSelect) return;
+            
             const monthOffset = parseInt(monthSelect.value);
             const calendar = document.getElementById('paymentCalendar');
             
             if (!calendar) return;
 
-            // Générer un calendrier de base
             const today = new Date();
             const targetMonth = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
             const daysInMonth = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
             const firstDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1).getDay();
 
-            // Noms des jours
             const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-            
             let calendarHTML = '';
 
-            // En-têtes des jours
             dayNames.forEach(day => {
                 calendarHTML += `<div class="calendar-day calendar-day-header">${day}</div>`;
             });
 
-            // Jours vides au début
             for (let i = 0; i < firstDay; i++) {
                 calendarHTML += '<div class="calendar-day"></div>';
             }
 
-            // Jours du mois
             for (let day = 1; day <= daysInMonth; day++) {
-                const hasPayment = Math.random() > 0.8; // Simuler des paiements
+                // On marque le jour actuel
+                const isToday = today.getDate() === day && monthOffset === 0;
                 calendarHTML += `
-                    <div class="calendar-day ${hasPayment ? 'has-payment' : ''}">
+                    <div class="calendar-day ${isToday ? 'today' : ''}">
                         ${day}
-                        ${hasPayment ? '<div style="font-size: 0.7rem; color: var(--success-color); margin-top: 5px;">Paiement</div>' : ''}
                     </div>
                 `;
             }
@@ -7006,9 +7043,8 @@ document.getElementById('editProjectForm').onsubmit = function(e) {
             showNotification('Calendrier mis à jour');
         }
 
-        // Voir les détails d'un investissement
         function viewInvestmentDetails(investmentId) {
-            const contribution = contributions.find(c => c.id === investmentId);
+            const contribution = typeof contributions !== 'undefined' ? contributions.find(c => c.id === investmentId) : null;
             if (!contribution) {
                 showNotification('Investissement non trouvé', 'error');
                 return;
@@ -7017,18 +7053,10 @@ document.getElementById('editProjectForm').onsubmit = function(e) {
             const member = users.find(u => u.id === contribution.member_id);
             const project = projects.find(p => p.id == contribution.project_id);
 
-            alert(`Détails de l'investissement:
-            
-Investisseur: ${member?.name || 'Inconnu'}
-Projet: ${project?.name || 'Inconnu'}
-Montant: ${formatCFA(contribution.amount)}
-Méthode de paiement: ${contribution.payment_method}
-Statut: ${contribution.status === 'completed' ? 'Validé' : 'En attente'}
-Date: ${new Date(contribution.created_at).toLocaleDateString()}
-            `);
+            alert(`Détails de l'investissement:\n\nInvestisseur: ${member?.full_name || member?.email || 'Inconnu'}\nProjet: ${project?.name || 'Inconnu'}\nMontant: ${contribution.amount} CFA\nStatut: ${contribution.status}\nDate: ${new Date(contribution.created_at).toLocaleDateString()}`);
         }
 
-        // Initialiser le calendrier des paiements
+        // Initialisation finale
         updatePaymentCalendar();
     </script>
 </body>
