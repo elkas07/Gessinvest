@@ -6949,7 +6949,7 @@ document.getElementById('editProjectForm').onsubmit = function(e) {
             try {
                 const fileName = `export-gessinvest-${new Date().toISOString().split('T')[0]}`;
                 
-                // Fonction de formatage sécurisée pour éviter les barres "/" dans le PDF
+                // Fonction de formatage pour éviter les barres "/" dans le PDF
                 const formatNumber = (num) => {
                     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
                 };
@@ -6972,71 +6972,52 @@ document.getElementById('editProjectForm').onsubmit = function(e) {
                     window.URL.revokeObjectURL(url);
                 } 
                 
-                // --- CAS 2 : PDF PROFESSIONNEL ---
+                // --- CAS 2 : VRAI PDF PROFESSIONNEL ---
                 else if (format === 'pdf') {
                     const { jsPDF } = window.jspdf;
                     const doc = new jsPDF();
 
-                    // Titre principal
-                    doc.setFontSize(22);
+                    // Titre et Design
+                    doc.setFontSize(18);
                     doc.setTextColor(255, 102, 0); // Orange GESS INVEST
                     doc.text("RAPPORT D'ACTIVITÉ GESS INVEST", 105, 20, { align: "center" });
 
-                    // Infos de génération
                     doc.setFontSize(10);
                     doc.setTextColor(100);
                     doc.text(`Document généré le : ${new Date().toLocaleString()}`, 14, 30);
 
-                    // Calcul du Total Global pour le résumé
+                    // Calcul du Total Global pour la ligne finale
                     const totalGlobal = projects.reduce((sum, p) => sum + (Number(p.collected) || 0), 0);
 
-                    // Préparation des données du tableau
-                    const tableRows = projects.map(p => [
-                        p.name, 
-                        formatNumber(p.target) + " CFA", 
-                        formatNumber(p.collected) + " CFA", 
-                        p.status.toUpperCase(),
-                        p.location
-                    ]);
+                    // Préparation des données avec formatage garanti sans barres /
+                    const tableRows = projects.map(p => {
+                        return [
+                            p.name, 
+                            formatNumber(p.target) + " CFA", 
+                            formatNumber(p.collected) + " CFA", 
+                            p.status.toUpperCase(),
+                            p.location
+                        ];
+                    });
 
-                    // Ajout de la ligne de Total (Footer du tableau)
+                    // AJOUT DE LA LIGNE DE TOTAL EN BAS DU TABLEAU
                     tableRows.push([
-                        { 
-                            content: 'TOTAL COLLECTÉ GLOBAL', 
-                            colSpan: 2, 
-                            styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } 
-                        },
-                        { 
-                            content: formatNumber(totalGlobal) + " CFA", 
-                            styles: { fontStyle: 'bold', fillColor: [255, 235, 215] } 
-                        },
-                        { 
-                            content: '', 
-                            colSpan: 2, 
-                            styles: { fillColor: [240, 240, 240] } 
-                        }
+                        { content: 'TOTAL COLLECTÉ GLOBAL', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } },
+                        { content: formatNumber(totalGlobal) + " CFA", styles: { fontStyle: 'bold', fillColor: [255, 230, 210] } },
+                        { content: '', colSpan: 2, styles: { fillColor: [240, 240, 240] } }
                     ]);
 
-                    // Création du tableau avec jsPDF AutoTable
+                    // Génération du tableau
                     doc.autoTable({
                         startY: 40,
                         head: [["Projet", "Objectif", "Collecté", "Statut", "Lieu"]],
                         body: tableRows,
-                        headStyles: { fillColor: [255, 102, 0], textColor: [255, 255, 255] },
-                        alternateRowStyles: { fillColor: [250, 250, 250] },
+                        headStyles: { fillColor: [255, 102, 0] }, // Orange
                         theme: 'striped',
                         margin: { top: 40 }
                     });
 
-                    // Pied de page
-                    const pageCount = doc.internal.getNumberOfPages();
-                    for(let i = 1; i <= pageCount; i++) {
-                        doc.setPage(i);
-                        doc.setFontSize(8);
-                        doc.setTextColor(150);
-                        doc.text(`GESS INVEST - Page ${i} sur ${pageCount}`, 105, 285, { align: "center" });
-                    }
-
+                    // Sauvegarde du vrai PDF
                     doc.save(fileName + ".pdf");
                 }
 
@@ -7045,9 +7026,51 @@ document.getElementById('editProjectForm').onsubmit = function(e) {
 
             } catch (error) {
                 console.error("❌ Erreur export:", error);
-                showNotification("Erreur lors de la génération.", "error");
+                showNotification("Erreur lors de la génération. Vérifiez la console.", "error");
             }
         }
+
+        // --- Fonctions du Calendrier ---
+        function updatePaymentCalendar() {
+            const calendar = document.getElementById('paymentCalendar');
+            const monthSelect = document.getElementById('paymentCalendarMonth');
+            if (!calendar || !monthSelect) return;
+
+            const monthOffset = parseInt(monthSelect.value);
+            const today = new Date();
+            const targetMonth = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+            const daysInMonth = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
+            const firstDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1).getDay();
+
+            let calendarHTML = '';
+            ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].forEach(day => {
+                calendarHTML += `<div class="calendar-day calendar-day-header">${day}</div>`;
+            });
+
+            for (let i = 0; i < firstDay; i++) calendarHTML += '<div class="calendar-day"></div>';
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const isToday = today.getDate() === day && monthOffset === 0;
+                calendarHTML += `<div class="calendar-day ${isToday ? 'today' : ''}">${day}</div>`;
+            }
+            calendar.innerHTML = calendarHTML;
+        }
+
+        function refreshPaymentCalendar() {
+            updatePaymentCalendar();
+            showNotification('Calendrier actualisé');
+        }
+
+        function viewInvestmentDetails(id) {
+            alert("Détails de l'investissement ID: " + id);
+        }
+
+        // Initialisation au chargement
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof updatePaymentCalendar === 'function') {
+                updatePaymentCalendar();
+            }
+        });
     </script>
 </body>
 </html>
