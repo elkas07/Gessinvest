@@ -3706,52 +3706,66 @@
                     ...p,
                     image_url: p.image_url ? `${p.image_url}?t=${Date.now()}` : p.image_url
                 }));
-				async function handleCreateProject(event) {
-            event.preventDefault(); // Empêche le rechargement de la page qui coupe la connexion
+				// --- FONCTION DE CRÉATION DE PROJET (À placer en dehors de loadProjects) ---
+        async function handleCreateProject(event) {
+            // 1. Bloquer impérativement le rechargement de la page
+            event.preventDefault(); 
             
-            if (!isSupabaseConnected || !window.supabaseClient) {
-                showNotification("Action impossible : le système est en mode hors ligne", "error");
+            // 2. Vérifier si Supabase est prêt
+            if (!window.supabaseClient || !isSupabaseConnected) {
+                showNotification("Action impossible : Connexion à la base de données perdue", "error");
                 return;
             }
 
             try {
-                // Récupération des valeurs du formulaire
+                showNotification("⏳ Création du projet en cours...");
+
+                // 3. Collecte des données du formulaire
                 const newProject = {
-                    name: document.getElementById('project-name').value,
-                    description: document.getElementById('project-description').value,
-                    location: document.getElementById('project-location').value,
+                    name: document.getElementById('project-name').value.trim(),
+                    description: document.getElementById('project-description').value.trim(),
+                    location: document.getElementById('project-location').value.trim(),
                     target: parseFloat(document.getElementById('project-target').value),
                     return_rate: parseFloat(document.getElementById('project-return').value),
                     duration: parseInt(document.getElementById('project-duration').value),
                     collected: 0,
-                    status: 'active',
+                    status: 'active', // Important : minuscule ou MAJ selon ta base (souvent 'active')
                     created_at: new Date().toISOString()
                 };
 
-                showNotification("Création du projet...");
-
-                // Envoi à Supabase
+                // 4. Envoi à la base de données Supabase
                 const { data, error } = await window.supabaseClient
                     .from('projects')
-                    .insert([newProject]);
+                    .insert([newProject])
+                    .select(); // Le .select() confirme que l'insertion a réussi
 
                 if (error) throw error;
 
+                // 5. Succès : Notifications et interface
                 showNotification("✅ Projet créé avec succès !");
                 
-                // Fermeture et réinitialisation
-                closeModal('addProjectModal');
-                event.target.reset();
+                // Fermer la fenêtre modale
+                if (typeof closeModal === 'function') {
+                    closeModal('addProjectModal');
+                }
                 
-                // Recharger la liste des projets pour voir le nouveau apparaître
-                if (typeof loadProjects === 'function') await loadProjects();
+                // Réinitialiser le formulaire et l'aperçu de l'image
+                event.target.reset();
+                const previewImg = document.getElementById('image-preview');
+                if (previewImg) previewImg.style.display = 'none';
+
+                // 6. Mise à jour des données locales
+                // Si ton système Realtime est actif, loadProjects() sera appelé tout seul, 
+                // mais on le force ici par sécurité.
+                if (typeof loadProjects === 'function') {
+                    await loadProjects();
+                }
 
             } catch (error) {
-                console.error("❌ Erreur de création:", error);
-                showNotification("Erreur lors de la création du projet", "error");
+                console.error("❌ Erreur Supabase:", error.message);
+                showNotification("Erreur de création : " + error.message, "error");
             }
         }
-
                 console.log('✅ Projets chargés avec cache-busting:', projects.length);
                 
                 updateProjectsDisplay();
