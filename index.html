@@ -2757,7 +2757,7 @@
         <div class="modal-content">
             <span class="close-modal" onclick="closeModal('addProjectModal')">&times;</span>
             <h2>Ajouter un nouveau projet</h2>
-            <form id="addProjectForm">
+            <form id="addProjectForm" onsubmit="handleCreateProject(event)">
                 <div class="form-group">
                     <label for="project-name">Nom du projet</label>
                     <input type="text" id="project-name" required>
@@ -3706,6 +3706,51 @@
                     ...p,
                     image_url: p.image_url ? `${p.image_url}?t=${Date.now()}` : p.image_url
                 }));
+				async function handleCreateProject(event) {
+            event.preventDefault(); // Empêche le rechargement de la page qui coupe la connexion
+            
+            if (!isSupabaseConnected || !window.supabaseClient) {
+                showNotification("Action impossible : le système est en mode hors ligne", "error");
+                return;
+            }
+
+            try {
+                // Récupération des valeurs du formulaire
+                const newProject = {
+                    name: document.getElementById('project-name').value,
+                    description: document.getElementById('project-description').value,
+                    location: document.getElementById('project-location').value,
+                    target: parseFloat(document.getElementById('project-target').value),
+                    return_rate: parseFloat(document.getElementById('project-return').value),
+                    duration: parseInt(document.getElementById('project-duration').value),
+                    collected: 0,
+                    status: 'active',
+                    created_at: new Date().toISOString()
+                };
+
+                showNotification("Création du projet...");
+
+                // Envoi à Supabase
+                const { data, error } = await window.supabaseClient
+                    .from('projects')
+                    .insert([newProject]);
+
+                if (error) throw error;
+
+                showNotification("✅ Projet créé avec succès !");
+                
+                // Fermeture et réinitialisation
+                closeModal('addProjectModal');
+                event.target.reset();
+                
+                // Recharger la liste des projets pour voir le nouveau apparaître
+                if (typeof loadProjects === 'function') await loadProjects();
+
+            } catch (error) {
+                console.error("❌ Erreur de création:", error);
+                showNotification("Erreur lors de la création du projet", "error");
+            }
+        }
 
                 console.log('✅ Projets chargés avec cache-busting:', projects.length);
                 
