@@ -6936,81 +6936,80 @@ document.getElementById('editProjectForm').onsubmit = function(e) {
             openModal('exportDataModal');
         }
 
-        async function generateExport() {
+      async function generateExport() {
             const format = document.querySelector('input[name="exportFormat"]:checked').value;
             
-            // Vérification si les données existent
             if (!projects || projects.length === 0) {
                 showNotification("Erreur : Aucun projet chargé à exporter", "error");
                 return;
             }
 
-            showNotification(`Préparation de l'export ${format.toUpperCase()}...`);
+            showNotification(`Génération de l'export ${format.toUpperCase()}...`);
             
             try {
-                let content = "";
-                let fileName = `export-gessinvest-${new Date().toISOString().split('T')[0]}`;
-                let mimeType = 'text/plain';
+                const fileName = `export-gessinvest-${new Date().toISOString().split('T')[0]}`;
 
-                // Cas 1 : Export CSV (Excel) - Le plus fiable
+                // --- CAS 1 : EXCEL / CSV ---
                 if (format === 'csv' || format === 'xlsx') {
-                    content = "\ufeff"; // Ajout du BOM pour les accents dans Excel
-                    content += "TYPE;NOM;OBJECTIF;COLLECTE;STATUT;VILLE\n";
-                    
+                    let content = "\ufeffTYPE;NOM;OBJECTIF;COLLECTE;STATUT;VILLE\n";
                     projects.forEach(p => {
                         content += `Projet;${p.name};${p.target};${p.collected};${p.status};${p.location}\n`;
                     });
-
-                    if (typeof users !== 'undefined') {
-                        users.forEach(u => {
-                            content += `Utilisateur;${u.full_name || u.email};-;-;${u.role};-\n`;
-                        });
-                    }
                     
-                    mimeType = 'text/csv;charset=utf-8;';
-                    fileName += ".csv";
-                } 
-                // Cas 2 : Export Rapport (Texte lisible au lieu de PDF corrompu)
-                else {
-                    content = "RAPPORT D'ACTIVITÉ GESSINVEST\n";
-                    content += "============================\n";
-                    content += `Généré le : ${new Date().toLocaleString()}\n\n`;
-                    
-                    content += "--- LISTE DES PROJETS ---\n";
-                    projects.forEach(p => {
-                        content += `• ${p.name.toUpperCase()}\n`;
-                        content += `  Objectif : ${p.target} CFA\n`;
-                        content += `  Collecté : ${p.collected} CFA\n`;
-                        content += `  Statut   : ${p.status}\n`;
-                        content += `  Lieu     : ${p.location}\n`;
-                        content += `---------------------------\n`;
-                    });
-                    
-                    mimeType = 'text/plain;charset=utf-8;';
-                    fileName += ".txt"; // Changé en .txt pour éviter l'erreur "Échec de chargement PDF"
-                }
-
-                // Création du lien de téléchargement réel
-                const blob = new Blob([content], { type: mimeType });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                
-                // Nettoyage
-                setTimeout(() => {
+                    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = fileName + ".csv";
+                    document.body.appendChild(a);
+                    a.click();
                     document.body.removeChild(a);
                     window.URL.revokeObjectURL(url);
-                }, 100);
+                } 
+                
+                // --- CAS 2 : VRAI PDF PROFESSIONNEL ---
+                else if (format === 'pdf') {
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
 
-                showNotification(`Fichier ${fileName} généré !`);
+                    // Titre et Design
+                    doc.setFontSize(18);
+                    doc.setTextColor(255, 102, 0); // Orange GESS INVEST
+                    doc.text("RAPPORT D'ACTIVITÉ GESS INVEST", 105, 20, { align: "center" });
+
+                    doc.setFontSize(10);
+                    doc.setTextColor(100);
+                    doc.text(`Document généré le : ${new Date().toLocaleString()}`, 14, 30);
+
+                    // Préparation des données pour le tableau
+                    const tableRows = projects.map(p => [
+                        p.name, 
+                        `${p.target.toLocaleString()} CFA`, 
+                        `${p.collected.toLocaleString()} CFA`, 
+                        p.status.toUpperCase(),
+                        p.location
+                    ]);
+
+                    // Génération du tableau
+                    doc.autoTable({
+                        startY: 40,
+                        head: [["Projet", "Objectif", "Collecté", "Statut", "Lieu"]],
+                        body: tableRows,
+                        headStyles: { fillColor: [255, 102, 0] }, // Orange
+                        theme: 'striped',
+                        margin: { top: 40 }
+                    });
+
+                    // Sauvegarde du vrai PDF
+                    doc.save(fileName + ".pdf");
+                }
+
+                showNotification("Export terminé avec succès !");
                 closeModal('exportDataModal');
 
             } catch (error) {
                 console.error("❌ Erreur export:", error);
-                showNotification("Erreur lors de la génération", "error");
+                showNotification("Erreur lors de la génération. Vérifiez la console.", "error");
             }
         }
 
@@ -7051,7 +7050,9 @@ document.getElementById('editProjectForm').onsubmit = function(e) {
 
         // Initialisation au chargement
         document.addEventListener('DOMContentLoaded', () => {
-            updatePaymentCalendar();
+            if (typeof updatePaymentCalendar === 'function') {
+                updatePaymentCalendar();
+            }
         });
     </script>
 </body>
