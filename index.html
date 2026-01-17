@@ -3593,10 +3593,9 @@
                 pendingTransactions = [];
             }
         }
-// ⭐⭐ VERSION CORRIGÉE : Charger les vérifications KYC pour l'Admin
+// ⭐⭐ 1. VERSION ADMIN : Pour voir les documents dans le dashboard
 async function loadKYCVerifications() {
     if (!isSupabaseConnected || !window.supabaseClient) {
-        console.log('📄 Chargement KYC: mode hors ligne');
         kycVerifications = [];
         return;
     }
@@ -3604,31 +3603,27 @@ async function loadKYCVerifications() {
     try {
         console.log('🔄 Chargement des vérifications KYC...');
         
-        // On récupère tout, même si le membre n'est pas bien lié
+        // On récupère les données. On utilise '*' pour être sûr de tout avoir
         const { data, error } = await window.supabaseClient
             .from('kyc_verifications')
-            .select(`
-                *,
-                members:user_id (id, name, email, phone)
-            `)
+            .select('*') 
             .order('submitted_at', { ascending: false });
         
         if (error) {
-            console.error('❌ Erreur chargement KYC:', error);
+            console.error('❌ Erreur:', error);
             kycVerifications = [];
             return;
         }
         
         kycVerifications = data || [];
-        console.log('✅ Vérifications KYC chargées:', kycVerifications.length);
+        console.log('✅ Documents trouvés pour admin:', kycVerifications.length);
         
     } catch (error) {
-        console.error('❌ Erreur chargement vérifications KYC:', error);
         kycVerifications = [];
     }
 }
 
-// ⭐⭐ VERSION CORRIGÉE : Charger le statut KYC pour le Membre
+// ⭐⭐ 2. VERSION MEMBRE : Pour afficher "En attente" sur son profil
 async function loadUserKYCStatus() {
     if (!currentUser || !isSupabaseConnected || !window.supabaseClient) {
         currentKYCStatus = 'not_submitted';
@@ -3637,35 +3632,17 @@ async function loadUserKYCStatus() {
     }
 
     try {
-        // 1. On cherche l'ID du membre avec son email
-        const { data: memberData, error: memberError } = await window.supabaseClient
-            .from('members')
-            .select('id')
-            .eq('email', currentUser.email)
-            .maybeSingle();
-
-        if (memberError || !memberData) {
-            currentKYCStatus = 'not_submitted';
-            updateKYCStatusDisplay();
-            return;
-        }
-
-        const memberId = memberData.id;
-
-        // 2. On cherche son document KYC
-        const { data: kycData, error: kycError } = await window.supabaseClient
+        // On cherche le KYC par l'ID de l'utilisateur directement
+        const { data: kycData } = await window.supabaseClient
             .from('kyc_verifications')
-            .select('*')
-            .eq('user_id', memberId)
+            .select('status')
+            .eq('user_id', currentUser.id) // Utilisation de l'ID direct
             .order('submitted_at', { ascending: false })
             .limit(1)
             .maybeSingle();
 
-        if (kycError && kycError.code !== 'PGRST116') {
-            console.error('Erreur chargement statut KYC:', kycError);
-            currentKYCStatus = 'not_submitted';
-        } else if (kycData) {
-            // ⭐ Si un document existe mais n'a pas de statut, on affiche "pending"
+        if (kycData) {
+            // ⭐ On force l'affichage du statut présent en base (ex: 'pending')
             currentKYCStatus = kycData.status || 'pending';
         } else {
             currentKYCStatus = 'not_submitted';
@@ -3674,7 +3651,7 @@ async function loadUserKYCStatus() {
         updateKYCStatusDisplay();
         
     } catch (error) {
-        console.error('Erreur chargement statut KYC:', error);
+        console.error('Erreur statut:', error);
         currentKYCStatus = 'not_submitted';
         updateKYCStatusDisplay();
     }
