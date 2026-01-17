@@ -3593,9 +3593,10 @@
                 pendingTransactions = [];
             }
         }
-// ⭐⭐ 1. VERSION ADMIN : Pour voir les documents dans le dashboard
+// ⭐⭐ VERSION CORRIGÉE : Charger les vérifications KYC (Vue Admin)
 async function loadKYCVerifications() {
     if (!isSupabaseConnected || !window.supabaseClient) {
+        console.log('📄 Chargement KYC: mode hors ligne');
         kycVerifications = [];
         return;
     }
@@ -3603,55 +3604,81 @@ async function loadKYCVerifications() {
     try {
         console.log('🔄 Chargement des vérifications KYC...');
         
-        // On récupère les données. On utilise '*' pour être sûr de tout avoir
+        // CORRECTION : On récupère tout (*) sans forcer de lien complexe
+        // Cela permet à l'admin de voir les lignes même si le nom du membre manque
         const { data, error } = await window.supabaseClient
             .from('kyc_verifications')
-            .select('*') 
+            .select(`
+                *,
+                members:user_id (id, name, email, phone)
+            `)
             .order('submitted_at', { ascending: false });
         
         if (error) {
-            console.error('❌ Erreur:', error);
+            console.error('❌ Erreur chargement KYC:', error);
             kycVerifications = [];
             return;
         }
         
         kycVerifications = data || [];
-        console.log('✅ Documents trouvés pour admin:', kycVerifications.length);
+        console.log('✅ Vérifications KYC chargées:', kycVerifications.length);
+        
+        // On force la mise à jour de l'affichage du tableau admin
+        if (typeof renderKYCTable === 'function') renderKYCTable();
         
     } catch (error) {
+        console.error('❌ Erreur critique admin:', error);
         kycVerifications = [];
     }
 }
 
-// ⭐⭐ 2. VERSION MEMBRE : Pour afficher "En attente" sur son profil
+// ⭐⭐ VERSION CORRIGÉE : Charger le statut pour le membre (Vue Utilisateur)
 async function loadUserKYCStatus() {
-    if (!currentUser || !isSupabaseConnected || !window.supabaseClient) {
+    // Vérification de sécurité pour éviter les plantages
+    if (!window.supabaseClient || !currentUser) {
         currentKYCStatus = 'not_submitted';
         updateKYCStatusDisplay();
         return;
     }
 
     try {
-        // On cherche le KYC par l'ID de l'utilisateur directement
-        const { data: kycData } = await window.supabaseClient
+        // 1. On identifie le membre par son email (le plus fiable)
+        const { data: memberData } = await window.supabaseClient
+            .from('members')
+            .select('id')
+            .eq('email', currentUser.email)
+            .maybeSingle();
+
+        if (!memberData) {
+            console.log('Profil membre non trouvé pour cet email');
+            currentKYCStatus = 'not_submitted';
+            updateKYCStatusDisplay();
+            return;
+        }
+
+        // 2. On cherche son document dans la table KYC
+        const { data: kycData, error: kycError } = await window.supabaseClient
             .from('kyc_verifications')
             .select('status')
-            .eq('user_id', currentUser.id) // Utilisation de l'ID direct
+            .eq('user_id', memberData.id)
             .order('submitted_at', { ascending: false })
             .limit(1)
             .maybeSingle();
 
         if (kycData) {
-            // ⭐ On force l'affichage du statut présent en base (ex: 'pending')
+            // ⭐ FORCE LE STATUT : Si une ligne existe, on prend son statut
+            // Si la colonne statut est vide en base, on affiche "pending" (en attente)
             currentKYCStatus = kycData.status || 'pending';
+            console.log('Statut KYC trouvé:', currentKYCStatus);
         } else {
             currentKYCStatus = 'not_submitted';
         }
         
+        // Mise à jour visuelle du bouton/texte sur l'interface
         updateKYCStatusDisplay();
         
     } catch (error) {
-        console.error('Erreur statut:', error);
+        console.error('Erreur lors de la mise à jour du statut:', error);
         currentKYCStatus = 'not_submitted';
         updateKYCStatusDisplay();
     }
