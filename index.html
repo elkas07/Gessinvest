@@ -4479,482 +4479,239 @@ async function loadCommissionSettings() {
                     </div>
                 `;
                 
-                // Afficher le bouton KYC si l'utilisateur a un document KYC
-                const kycBtn = document.getElementById('kycActionBtn');
-                if (kycDoc) {
-                    kycBtn.style.display = 'inline-block';
-                } else {
-                    kycBtn.style.display = 'none';
-                }
-                
-                openModal('userDetailsModal');
-            }
-        }
+  // ⭐ CORRECTION : Affichage dynamique du bouton dans les détails utilisateur
+function showUserKycButton(userId) {
+    const kycDoc = kycVerifications.find(k => k.user_id === userId);
+    const kycBtn = document.getElementById('kycActionBtn');
+    if (kycBtn) {
+        kycBtn.style.display = kycDoc ? 'inline-block' : 'none';
+    }
+    openModal('userDetailsModal');
+}
 
-        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Obtenir le texte du statut KYC
-        function getKYCStatusText(status) {
-            switch(status) {
-                case 'not_submitted': return 'Non soumis';
-                case 'pending': return 'En attente';
-                case 'verified': return 'Vérifié';
-                case 'rejected': return 'Rejeté';
-                default: return 'Non soumis';
-            }
-        }
+// Obtenir le texte du statut KYC
+function getKYCStatusText(status) {
+    switch(status) {
+        case 'not_submitted': return 'Non soumis';
+        case 'pending': return 'En attente';
+        case 'verified': return 'Vérifié';
+        case 'rejected': return 'Rejeté';
+        default: return 'Non soumis';
+    }
+}
 
-        // Voir le KYC d'un utilisateur
-        function viewUserKYC(userId) {
-            const kycDoc = kycVerifications.find(k => k.user_id === userId);
-            if (kycDoc) {
-                currentViewingUserId = userId;
-                viewKYCVerification(kycDoc.id);
-                closeModal('userDetailsModal');
-                openModal('adminKYCPortalModal');
-            } else {
-                showNotification('Cet utilisateur n\'a pas soumis de document KYC', 'warning');
-            }
-        }
+// Voir le KYC d'un utilisateur (Admin)
+function viewUserKYC(userId) {
+    const kycDoc = kycVerifications.find(k => k.user_id === userId);
+    if (kycDoc) {
+        currentViewingUserId = userId;
+        viewKYCVerification(kycDoc.id);
+        closeModal('userDetailsModal');
+        openModal('adminKYCPortalModal');
+    } else {
+        showNotification('Cet utilisateur n\'a pas soumis de document KYC', 'warning');
+    }
+}
 
-        function openEditUserModal(userId) {
-            const user = users.find(u => u.id === userId);
-            if (user) {
-                currentViewingUserId = userId;
-                document.getElementById('edit-user-name').value = user.name || '';
-                document.getElementById('edit-user-email').value = user.email;
-                document.getElementById('edit-user-phone').value = user.phone || '';
-                document.getElementById('edit-user-role').value = user.role || 'investor';
-                document.getElementById('edit-user-status').value = user.status || 'active';
-                document.getElementById('edit-user-balance').value = user.balance || 0;
-                openModal('editUserModal');
-            }
-        }
+// Modifier un utilisateur
+function openEditUserModal(userId) {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+        currentViewingUserId = userId;
+        document.getElementById('edit-user-name').value = user.name || '';
+        document.getElementById('edit-user-email').value = user.email;
+        document.getElementById('edit-user-phone').value = user.phone || '';
+        document.getElementById('edit-user-role').value = user.role || 'investor';
+        document.getElementById('edit-user-status').value = user.status || 'active';
+        document.getElementById('edit-user-balance').value = user.balance || 0;
+        openModal('editUserModal');
+    }
+}
 
-        // ⭐⭐ CORRECTION MAJEURE ⭐⭐ - Portail KYC
-        function openKYCPortal() {
-            if (!currentUser) {
-                showNotification('Veuillez vous connecter pour accéder au portail KYC', 'error');
-                openLoginModal();
-                return;
-            }
+// Portail KYC (Utilisateur)
+function openKYCPortal() {
+    if (!currentUser) {
+        showNotification('Veuillez vous connecter pour accéder au portail KYC', 'error');
+        openLoginModal();
+        return;
+    }
+    selectedDocumentType = 'passport';
+    selectedDocumentFile = null;
+    updateKYCStatusDisplay();
+    document.getElementById('documentPreviewContainer').style.display = 'none';
+    document.getElementById('submitKYCBtn').disabled = true;
+    document.getElementById('uploadProgressContainer').style.display = 'none';
+    initKYCDocumentUpload();
+    openModal('kycPortalModal');
+}
 
-            // Réinitialiser la sélection de document
-            selectedDocumentType = 'passport';
-            selectedDocumentFile = null;
-            
-            // Mettre à jour l'affichage du statut
-            updateKYCStatusDisplay();
-            
-            // Réinitialiser l'interface d'upload
-            document.getElementById('documentPreviewContainer').style.display = 'none';
-            document.getElementById('submitKYCBtn').disabled = true;
-            document.getElementById('uploadProgressContainer').style.display = 'none';
-            
-            // Initialiser l'upload de document
-            initKYCDocumentUpload();
-            
-            openModal('kycPortalModal');
-        }
-
-        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Initialisation de l'upload de document KYC
-        function initKYCDocumentUpload() {
-            const uploadArea = document.getElementById('documentUploadArea');
-            const fileInput = document.getElementById('kycDocumentUpload');
-            const documentTypeRadios = document.querySelectorAll('input[name="documentType"]');
-            
-            // Gérer le changement de type de document
-            documentTypeRadios.forEach(radio => {
-                radio.addEventListener('change', function() {
-                    selectedDocumentType = this.value;
-                    updateDocumentTitle();
-                    // Réinitialiser le fichier sélectionné
-                    selectedDocumentFile = null;
-                    document.getElementById('documentPreviewContainer').style.display = 'none';
-                    document.getElementById('submitKYCBtn').disabled = true;
-                    document.getElementById('uploadProgressContainer').style.display = 'none';
-                });
-            });
-            
-            // Gérer le clic sur la zone d'upload
-            uploadArea.addEventListener('click', function() {
-                fileInput.click();
-            });
-            
-            // Gérer le drag and drop
-            uploadArea.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                this.style.borderColor = 'var(--accent-color)';
-                this.style.backgroundColor = '#fff5f0';
-            });
-            
-            uploadArea.addEventListener('dragleave', function(e) {
-                e.preventDefault();
-                this.style.borderColor = '#cbd5e0';
-                this.style.backgroundColor = '#f8fafc';
-            });
-            
-            uploadArea.addEventListener('drop', function(e) {
-                e.preventDefault();
-                this.style.borderColor = '#cbd5e0';
-                this.style.backgroundColor = '#f8fafc';
-                
-                if (e.dataTransfer.files.length > 0) {
-                    handleDocumentSelection(e.dataTransfer.files[0]);
-                }
-            });
-            
-            // Gérer la sélection de fichier
-            fileInput.addEventListener('change', function(e) {
-                if (e.target.files.length > 0) {
-                    handleDocumentSelection(e.target.files[0]);
-                }
-            });
-            
-            // Mettre à jour le titre initial
+// Initialisation de l'upload
+function initKYCDocumentUpload() {
+    const uploadArea = document.getElementById('documentUploadArea');
+    const fileInput = document.getElementById('kycDocumentUpload');
+    const documentTypeRadios = document.querySelectorAll('input[name="documentType"]');
+    
+    documentTypeRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            selectedDocumentType = this.value;
             updateDocumentTitle();
-        }
-        
-        function updateDocumentTitle() {
-            const titles = {
-                'passport': 'Soumettre votre passeport',
-                'nni': 'Soumettre votre carte d\'identité nationale (NNI)',
-                'driver_license': 'Soumettre votre permis de conduire'
-            };
-            document.getElementById('selectedDocumentTitle').textContent = titles[selectedDocumentType] || 'Soumettre votre document';
-        }
-        
-        function handleDocumentSelection(file) {
-            // Vérifier la taille du fichier (max 5MB)
-            if (file.size > 5 * 1024 * 1024) {
-                showNotification('Le fichier est trop volumineux (max. 5MB)', 'error');
-                return;
-            }
-            
-            // Vérifier le type de fichier
-            const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
-            if (!validTypes.includes(file.type)) {
-                showNotification('Format de fichier non supporté. Utilisez JPG, PNG ou PDF.', 'error');
-                return;
-            }
-            
-            selectedDocumentFile = file;
-            
-            // Afficher l'aperçu
-            const previewContainer = document.getElementById('documentPreviewContainer');
-            const documentName = document.getElementById('documentName');
-            const previewImg = document.getElementById('documentPreviewImg');
-            
-            documentName.textContent = file.name;
-            
-            if (file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    previewImg.src = e.target.result;
-                    previewImg.style.display = 'block';
-                };
-                reader.readAsDataURL(file);
-            } else {
-                previewImg.style.display = 'none';
-            }
-            
-            previewContainer.style.display = 'block';
-            document.getElementById('submitKYCBtn').disabled = false;
-        }
-        
-        function removeDocument() {
-            selectedDocumentFile = null;
-            document.getElementById('documentPreviewContainer').style.display = 'none';
-            document.getElementById('submitKYCBtn').disabled = true;
-            document.getElementById('uploadProgressContainer').style.display = 'none';
-            document.getElementById('kycDocumentUpload').value = '';
-        }
-
-        // ⭐⭐ CORRECTION CRITIQUE ⭐⭐ - Soumettre un document KYC
-        async function submitKYCDocument() {
-            if (!currentUser) {
-                showNotification('Veuillez vous connecter', 'error');
-                return;
-            }
-
-            if (!selectedDocumentFile) {
-                showNotification('Veuillez sélectionner un document', 'error');
-                return;
-            }
-
-            if (!isSupabaseConnected || !window.supabaseClient) {
-                showNotification('Mode hors ligne - Impossible de soumettre le document', 'warning');
-                return;
-            }
-
-            try {
-                const submitBtn = document.getElementById('submitKYCBtn');
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement en cours...';
-
-                const progressContainer = document.getElementById('uploadProgressContainer');
-                const progressBar = document.getElementById('uploadProgressBar');
-                const progressText = document.getElementById('uploadProgressText');
-                const progressPercentage = document.getElementById('uploadPercentage');
-
-                progressContainer.style.display = 'block';
-                progressText.textContent = 'Téléchargement du document...';
-                progressBar.style.width = '10%';
-                progressPercentage.textContent = '10%';
-
-                // 1. Récupérer ou créer le membre
-                const { data: memberData, error: memberError } = await window.supabaseClient
-                    .from('members')
-                    .select('id')
-                    .eq('email', currentUser.email)
-                    .maybeSingle();
-
-                if (memberError) {
-                    throw new Error('Erreur récupération membre: ' + memberError.message);
-                }
-
-                let memberId;
-                if (!memberData) {
-                    // Créer le membre
-                    const { data: newMember, error: createError } = await window.supabaseClient
-                        .from('members')
-                        .insert({
-                            email: currentUser.email,
-                            name: currentUser.user_metadata?.name || currentUser.email.split('@')[0],
-                            phone: currentUser.user_metadata?.phone || '',
-                            role: 'investor',
-                            status: 'active',
-                            balance: 0,
-                            total_invested: 0
-                        })
-                        .select('id')
-                        .single();
-
-                    if (createError) throw createError;
-                    memberId = newMember.id;
-                } else {
-                    memberId = memberData.id;
-                }
-
-                progressBar.style.width = '30%';
-                progressPercentage.textContent = '30%';
-                progressText.textContent = 'Préparation de l\'upload...';
-
-                // 2. Uploader vers le bucket kyc_documents
-                const fileName = `kyc_${memberId}_${Date.now()}.${selectedDocumentFile.name.split('.').pop()}`;
-                
-                const { error: uploadError } = await window.supabaseClient.storage
-                    .from('kyc_documents')  // ⚠️ Note: le nom du bucket est sensible à la casse
-                    .upload(fileName, selectedDocumentFile, {
-                        cacheControl: '3600',
-                        upsert: false
-                    });
-
-                if (uploadError) {
-                    console.error('❌ Erreur upload storage:', uploadError);
-                    throw new Error('Erreur lors du téléchargement du document: ' + uploadError.message);
-                }
-
-                progressBar.style.width = '70%';
-                progressPercentage.textContent = '70%';
-                progressText.textContent = 'Récupération de l\'URL...';
-
-                // 3. Récupérer l'URL publique
-                const { data: urlData } = window.supabaseClient.storage
-                    .from('kyc_documents')
-                    .getPublicUrl(fileName);
-
-                const fileUrl = urlData.publicUrl;
-
-                progressBar.style.width = '90%';
-                progressPercentage.textContent = '90%';
-                progressText.textContent = 'Enregistrement dans la base de données...';
-
-                // 4. Créer l'enregistrement KYC
-                const kycData = {
-                    user_id: memberId,
-                    document_type: selectedDocumentType,
-                    status: 'pending',
-                    submitted_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                    documents: [
-                        {
-                            type: selectedDocumentType,
-                            file_name: selectedDocumentFile.name,
-                            file_url: fileUrl,
-                            file_size: selectedDocumentFile.size,
-                            uploaded_at: new Date().toISOString()
-                        }
-                    ]
-                };
-
-                // 1. Upload du fichier dans le bucket
-const { data: uploadData, error: uploadError } = await window.supabaseClient.storage
-  .from('kyc_documents')
-  .upload(`user_${userId}/${file.name}`, file);
-
-if (uploadError) {
-  console.error('❌ Erreur upload fichier:', uploadError);
-  throw new Error('Erreur upload fichier: ' + uploadError.message);
+            removeDocument(); // Reset l'aperçu si on change de type
+        });
+    });
+    
+    uploadArea.onclick = () => fileInput.click();
+    
+    uploadArea.ondragover = (e) => { e.preventDefault(); uploadArea.style.borderColor = 'var(--accent-color)'; };
+    uploadArea.ondragleave = () => { uploadArea.style.borderColor = '#cbd5e0'; };
+    uploadArea.ondrop = (e) => {
+        e.preventDefault();
+        uploadArea.style.borderColor = '#cbd5e0';
+        if (e.dataTransfer.files.length > 0) handleDocumentSelection(e.dataTransfer.files[0]);
+    };
+    
+    fileInput.onchange = (e) => {
+        if (e.target.files.length > 0) handleDocumentSelection(e.target.files[0]);
+    };
+    updateDocumentTitle();
 }
 
-// 2. Insertion dans la table kyc_documents
-const { data: docData, error: docError } = await window.supabaseClient
-  .from('kyc_documents')
-  .insert([{
-    user_id: userId,
-    member_id: memberId,
-    document_type: 'passport', // ou 'ID', selon le cas
-    file_path: `user_${userId}/${file.name}`,
-    status: 'pending'
-  }]);
-
-if (docError) {
-  console.error('❌ Erreur insertion document KYC:', docError);
-  throw new Error('Erreur insertion document KYC: ' + docError.message);
+function updateDocumentTitle() {
+    const titles = {
+        'passport': 'Soumettre votre passeport',
+        'nni': 'Soumettre votre carte d\'identité nationale (NNI)',
+        'driver_license': 'Soumettre votre permis de conduire'
+    };
+    document.getElementById('selectedDocumentTitle').textContent = titles[selectedDocumentType] || 'Soumettre votre document';
 }
 
-// 3. Insertion dans la table kyc_verifications
-const { error: kycError } = await window.supabaseClient
-  .from('kyc_verifications')
-  .insert([{
-    user_id: userId,
-    status: 'pending',
-    document_url: `user_${userId}/${file.name}`, // lien vers le fichier
-    submitted_at: new Date().toISOString()
-  }]);
-
-if (kycError) {
-  console.error('❌ Erreur enregistrement KYC:', kycError);
-
-  // Nettoyer le fichier uploadé en cas d'erreur
-  try {
-    await window.supabaseClient.storage
-      .from('kyc_documents')
-      .remove([`user_${userId}/${file.name}`]);
-  } catch (cleanupError) {
-    console.warn('⚠️ Erreur nettoyage fichier:', cleanupError);
-  }
-
-  throw new Error('Erreur lors de la soumission du KYC: ' + kycError.message);
+function handleDocumentSelection(file) {
+    if (file.size > 5 * 1024 * 1024) return showNotification('Fichier trop volumineux (max 5MB)', 'error');
+    const validTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+    if (!validTypes.includes(file.type)) return showNotification('Format non supporté (JPG, PNG, PDF)', 'error');
+    
+    selectedDocumentFile = file;
+    document.getElementById('documentName').textContent = file.name;
+    const previewImg = document.getElementById('documentPreviewImg');
+    
+    if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => { previewImg.src = e.target.result; previewImg.style.display = 'block'; };
+        reader.readAsDataURL(file);
+    } else {
+        previewImg.style.display = 'none';
+    }
+    document.getElementById('documentPreviewContainer').style.display = 'block';
+    document.getElementById('submitKYCBtn').disabled = false;
 }
 
+function removeDocument() {
+    selectedDocumentFile = null;
+    document.getElementById('documentPreviewContainer').style.display = 'none';
+    document.getElementById('submitKYCBtn').disabled = true;
+    document.getElementById('kycDocumentUpload').value = '';
+}
 
-                progressBar.style.width = '100%';
-                progressPercentage.textContent = '100%';
-                progressText.textContent = 'Document soumis avec succès !';
+// ⭐ CORRECTION CRITIQUE : Soumission avec URL directe
+async function submitKYCDocument() {
+    if (!currentUser || !selectedDocumentFile) return;
+    
+    const submitBtn = document.getElementById('submitKYCBtn');
+    const progressContainer = document.getElementById('uploadProgressContainer');
+    const progressBar = document.getElementById('uploadProgressBar');
 
-                // Mettre à jour le statut local
-                currentKYCStatus = 'pending';
-                await loadUserKYCStatus();
-                updateKYCStatusDisplay();
+    try {
+        submitBtn.disabled = true;
+        progressContainer.style.display = 'block';
 
-                // Recharger les vérifications KYC
-                await loadKYCVerifications();
+        // 1. Récupérer ID membre
+        const { data: member } = await window.supabaseClient.from('members').select('id').eq('email', currentUser.email).single();
+        if (!member) throw new Error("Membre non trouvé");
 
-                setTimeout(() => {
-                    showNotification('Document KYC soumis avec succès ! Vérification en cours.');
-                    closeModal('kycPortalModal');
-                    
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Soumettre pour vérification';
-                    }
+        // 2. Upload Storage
+        const fileExt = selectedDocumentFile.name.split('.').pop();
+        const fileName = `kyc_${member.id}_${Date.now()}.${fileExt}`;
+        const { error: upErr } = await window.supabaseClient.storage.from('kyc_documents').upload(fileName, selectedDocumentFile);
+        if (upErr) throw upErr;
 
-                    if (progressContainer) {
-                        progressContainer.style.display = 'none';
-                    }
-                }, 1000);
+        // 3. Récupérer URL publique
+        const { data: urlData } = window.supabaseClient.storage.from('kyc_documents').getPublicUrl(fileName);
 
-            } catch (error) {
-                console.error('❌ Erreur soumission KYC:', error);
+        // 4. Enregistrer en Base avec le champ document_url
+        const { error: insErr } = await window.supabaseClient.from('kyc_verifications').insert([{
+            user_id: member.id,
+            document_type: selectedDocumentType,
+            status: 'pending',
+            document_url: urlData.publicUrl, // URL directe pour l'admin
+            submitted_at: new Date().toISOString()
+        }]);
 
-                const submitBtn = document.getElementById('submitKYCBtn');
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Soumettre pour vérification';
-                }
+        if (insErr) throw insErr;
 
-                const progressContainer = document.getElementById('uploadProgressContainer');
-                if (progressContainer) {
-                    progressContainer.style.display = 'none';
-                }
+        showNotification('Succès ! Document en cours de vérification.');
+        closeModal('kycPortalModal');
+        loadKYCVerifications(); 
 
-                showNotification('Erreur lors de la soumission: ' + error.message, 'error');
-            }
-        }
+    } catch (err) {
+        showNotification(err.message, 'error');
+        submitBtn.disabled = false;
+    }
+}
 
-        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Ouvrir le portail admin KYC
-        function openAdminKYCPortal() {
-            loadAdminKYCList();
-            openModal('adminKYCPortalModal');
-        }
+// Admin : Charger la liste
+async function loadAdminKYCList() {
+    const loader = document.getElementById('kycLoading');
+    if (loader) loader.classList.add('active');
+    try {
+        await loadKYCVerifications();
+        updateAdminKYCList();
+    } finally {
+        if (loader) loader.classList.remove('active');
+    }
+}
 
-        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Charger la liste KYC admin
-        async function loadAdminKYCList() {
-            const loadingIndicator = document.getElementById('kycLoading');
-            if (loadingIndicator) {
-                loadingIndicator.classList.add('active');
-            }
+// ⭐ CORRECTION MAJEURE : Rendu de la liste Admin
+function updateAdminKYCList() {
+    const tbody = document.getElementById('adminKYCList');
+    if (!tbody) return;
+    tbody.innerHTML = '';
 
-            try {
-                await loadKYCVerifications();
-                updateAdminKYCList();
+    if (kycVerifications.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucun document à valider</td></tr>';
+        return;
+    }
 
-                if (loadingIndicator) {
-                    loadingIndicator.classList.remove('active');
-                }
-            } catch (error) {
-                console.error('❌ Erreur chargement liste KYC:', error);
-                if (loadingIndicator) {
-                    loadingIndicator.classList.remove('active');
-                }
-                showNotification('Erreur chargement liste KYC', 'error');
-            }
-        }
+    kycVerifications.forEach(kyc => {
+        const user = kyc.members || { name: 'Inconnu', email: kyc.user_id };
+        const statusClass = `kyc-${kyc.status}`;
+        // On récupère l'URL soit du champ direct, soit du tableau documents
+        const fileUrl = kyc.document_url || (kyc.documents?.[0]?.file_url) || '#';
 
-        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour la liste KYC admin
-        function updateAdminKYCList() {
-            const tbody = document.getElementById('adminKYCList');
-            if (!tbody) return;
-
-            tbody.innerHTML = '';
-
-            if (kycVerifications.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucune vérification KYC</td></tr>';
-                return;
-            }
-
-            kycVerifications.forEach(kyc => {
-                const user = kyc.members || { name: 'Utilisateur inconnu', email: 'Email inconnu' };
-                const statusText = getKYCStatusText(kyc.status);
-                
-                const statusClass = `kyc-${kyc.status.replace('_', '-')}`;
-
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${user.name || 'Non renseigné'}</td>
-                    <td>${user.email}</td>
-                    <td>${getDocumentTypeText(kyc.document_type)}</td>
-                    <td><span class="kyc-status ${statusClass}">${statusText}</span></td>
-                    <td>${kyc.submitted_at ? new Date(kyc.submitted_at).toLocaleDateString() : 'N/A'}</td>
-                    <td>
-                        <div class="admin-actions">
-                            <button class="admin-btn btn-edit" onclick="viewKYCVerification('${kyc.id}')">
-                                <i class="fas fa-eye"></i> Voir
-                            </button>
-                            ${kyc.status === 'pending' ? `
-                            <button class="admin-btn btn-validate" onclick="approveKYC('${kyc.id}')">
-                                <i class="fas fa-check"></i> Approuver
-                            </button>
-                            <button class="admin-btn btn-delete" onclick="rejectKYC('${kyc.id}')">
-                                <i class="fas fa-times"></i> Rejeter
-                            </button>
-                            ` : ''}
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${user.name}</td>
+            <td>${user.email}</td>
+            <td>${kyc.document_type.toUpperCase()}</td>
+            <td><span class="kyc-status ${statusClass}">${getKYCStatusText(kyc.status)}</span></td>
+            <td>${new Date(kyc.submitted_at).toLocaleDateString()}</td>
+            <td>
+                <div class="admin-actions">
+                    <a href="${fileUrl}" target="_blank" class="admin-btn btn-edit">
+                        <i class="fas fa-eye"></i> Voir
+                    </a>
+                    ${kyc.status === 'pending' ? `
+                        <button class="admin-btn btn-validate" onclick="approveKYC('${kyc.id}')">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button class="admin-btn btn-delete" onclick="rejectKYC('${kyc.id}')">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    ` : ''}
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
 
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Obtenir le texte du type de document
         function getDocumentTypeText(type) {
