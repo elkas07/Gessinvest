@@ -4786,24 +4786,57 @@ async function loadCommissionSettings() {
                     ]
                 };
 
-                const { error: kycError } = await window.supabaseClient
-                    .from('kyc_verifications')
-                    .insert([kycData]);
+                // 1. Upload du fichier dans le bucket
+const { data: uploadData, error: uploadError } = await window.supabaseClient.storage
+  .from('kyc_documents')
+  .upload(`user_${userId}/${file.name}`, file);
 
-                if (kycError) {
-                    console.error('❌ Erreur enregistrement KYC:', kycError);
-                    
-                    // Nettoyer le fichier uploadé en cas d'erreur
-                    try {
-                        await window.supabaseClient.storage
-                            .from('kyc_documents')
-                            .remove([fileName]);
-                    } catch (cleanupError) {
-                        console.warn('⚠️ Erreur nettoyage fichier:', cleanupError);
-                    }
-                    
-                    throw new Error('Erreur lors de la soumission du KYC: ' + kycError.message);
-                }
+if (uploadError) {
+  console.error('❌ Erreur upload fichier:', uploadError);
+  throw new Error('Erreur upload fichier: ' + uploadError.message);
+}
+
+// 2. Insertion dans la table kyc_documents
+const { data: docData, error: docError } = await window.supabaseClient
+  .from('kyc_documents')
+  .insert([{
+    user_id: userId,
+    member_id: memberId,
+    document_type: 'passport', // ou 'ID', selon le cas
+    file_path: `user_${userId}/${file.name}`,
+    status: 'pending'
+  }]);
+
+if (docError) {
+  console.error('❌ Erreur insertion document KYC:', docError);
+  throw new Error('Erreur insertion document KYC: ' + docError.message);
+}
+
+// 3. Insertion dans la table kyc_verifications
+const { error: kycError } = await window.supabaseClient
+  .from('kyc_verifications')
+  .insert([{
+    user_id: userId,
+    status: 'pending',
+    document_url: `user_${userId}/${file.name}`, // lien vers le fichier
+    submitted_at: new Date().toISOString()
+  }]);
+
+if (kycError) {
+  console.error('❌ Erreur enregistrement KYC:', kycError);
+
+  // Nettoyer le fichier uploadé en cas d'erreur
+  try {
+    await window.supabaseClient.storage
+      .from('kyc_documents')
+      .remove([`user_${userId}/${file.name}`]);
+  } catch (cleanupError) {
+    console.warn('⚠️ Erreur nettoyage fichier:', cleanupError);
+  }
+
+  throw new Error('Erreur lors de la soumission du KYC: ' + kycError.message);
+}
+
 
                 progressBar.style.width = '100%';
                 progressPercentage.textContent = '100%';
