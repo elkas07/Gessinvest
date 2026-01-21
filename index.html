@@ -5864,42 +5864,84 @@ const newProject = {
                     showNotification(`Investissement de ${formatCFA(transaction.amount)} validé ! Projet mis à jour.`);
                 }
 
-                // 4. Mettre à jour le statut de la transaction
-               const { error: updateStatusError } = await window.supabaseClient
+                // 4. Mettre à jour le statut de la transaction dans Supabase
+                const { error: updateStatusError } = await window.supabaseClient
                     .from('transactions')
                     .update({ 
-                        status: 'validated',
+                        status: 'validated', 
                         validated_at: new Date().toISOString()
                     })
                     .eq('id', transactionId);
 
                 if (updateStatusError) throw updateStatusError;
 
-                // 5. Retirer la ligne du tableau
+                // 5. Retirer la ligne du tableau visuellement
                 removeTransactionRow(transactionId);
 
-                // 6. Attendre un court instant puis mettre à jour les données
+                // 6. Attendre un court instant (1.5s) pour laisser le temps au Trigger SQL de finir
                 setTimeout(async () => {
-                    await loadPendingTransactions();
-                    await loadProjects();
-                    await loadContributions();
-                    await loadUsers();
+                    console.log('🔄 Synchronisation forcée des données en cours...');
                     
-                    // 7. Mettre à jour les dashboards
-                    if (currentUser && currentUser.email === 'elkas07@live.fr') {
-                        updateAdminDashboard();
-                    } else if (currentUser) {
-                        updateMemberDashboard();
+                    // Rechargement des données brutes
+                    await Promise.all([
+                        loadPendingTransactions(),
+                        loadProjects(),
+                        loadContributions(),
+                        loadUsers()
+                    ]);
+
+                    // ⭐ CRUCIAL : Mettre à jour manuellement l'objet currentUser avec les chiffres réels
+                    if (currentUser) {
+                        // On cherche le membre dans la liste users mise à jour (total 8 selon vos logs)
+                        const freshUserData = (typeof users !== 'undefined' ? users : allUsers)
+                            .find(u => u.id === currentUser.id || u.email === currentUser.email);
+                        
+                        if (freshUserData) {
+                            // On injecte les valeurs réelles de la base (ex: 70 000 CFA investi)
+                            currentUser.balance = freshUserData.balance;
+                            currentUser.total_invested = freshUserData.total_invested;
+                            
+                            // Recalcul manuel des "Gains estimés" pour l'affichage
+                            const validContribs = allContributions.filter(c => 
+                                (c.member_id === currentUser.id || c.user_id === currentUser.id) && 
+                                (c.status === 'validé' || c.status === 'validated')
+                            );
+                            
+                            currentUser.gains_estimes = validContribs.reduce((sum, c) => {
+                                const project = allProjects.find(p => p.id === c.project_id);
+                                const yieldRate = project ? (parseFloat(project.yield || project.rendement) / 100) : 0;
+                                return sum + (c.amount * yieldRate);
+                            }, 0);
+                            
+                            console.log('💰 Données synchronisées avec succès :', {
+                                balance: currentUser.balance,
+                                total_invested: currentUser.total_invested
+                            });
+                        }
                     }
-                }, 1000); 
+
+                    // 7. Mettre à jour l'affichage des dashboards
+                    if (currentUser && currentUser.email === 'elkas07@live.fr') {
+                        if (typeof updateAdminDashboard === 'function') updateAdminDashboard();
+                    } 
+                    
+                    // Cette fonction est indispensable pour réécrire les chiffres dans les blocs blancs
+                    if (typeof updateMemberDashboard === 'function') {
+                        updateMemberDashboard();
+                    } else {
+                        // Si le dashboard ne réagit toujours pas, on force un rafraîchissement
+                        window.location.reload();
+                    }
+                }, 1500); 
                 
-                console.log('✅ Transaction validée avec succès:', transactionId);
+                console.log('✅ Transaction validée et dashboard synchronisé:', transactionId);
                 
             } catch (error) {
                 console.error('❌ Erreur validation transaction:', error);
-                showNotification('Erreur lors de la validation: ' + error.message, 'error');
+                if (typeof showNotification === 'function') {
+                    showNotification('Erreur lors de la validation: ' + error.message, 'error');
+                }
             }
-        }
 
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une transaction
         async function rejectTransaction(transactionId) {
@@ -6423,75 +6465,89 @@ document.getElementById('editProjectForm').onsubmit = function(e) {
         }
 
         // Mettre à jour le dashboard membre
-        function updateMemberDashboard() {
-            if (!currentUser) return;
+function updateMemberDashboard() {
+    if (!currentUser) return;
 
-            // Trouver le membre
-            const member = users.find(u => u.email === currentUser.email);
-            if (!member) return;
+    // IMPORTANT : On cherche les données fraîches dans la liste globale 'users'
+    // qui a été mise à jour par loadUsers() après la validation
+    const member = users.find(u => u.email === currentUser.email || u.id === currentUser.id);
+    if (!member) return;
 
-            // Mettre à jour les informations
-            document.getElementById('memberWelcomeMessage').textContent = `Bonjour ${member.name || currentUser.email.split('@')[0]}, bienvenue dans votre espace investisseur`;
-            document.getElementById('memberBalance').textContent = formatCFA(member.balance || 0);
-            document.getElementById('totalInvested').textContent = formatCFA(member.total_invested || 0);
-            document.getElementById('availableBalance').textContent = formatCFA(member.balance || 0);
-            
-            // Calculer les gains estimés
-            const expectedReturn = (member.total_invested || 0) * 0.12; // 12% de rendement estimé
-            document.getElementById('expectedReturn').textContent = formatCFA(expectedReturn);
-            
-            // Compter les projets actifs
-            const activeProjectsCount = projects.filter(p => p.status === 'active').length;
-            document.getElementById('activeProjects').textContent = activeProjectsCount;
+    // Mise à jour des informations de bienvenue
+    const welcomeMsg = document.getElementById('memberWelcomeMessage');
+    if (welcomeMsg) {
+        welcomeMsg.textContent = `Bonjour ${member.name || currentUser.email.split('@')[0]}, bienvenue dans votre espace investisseur`;
+    }
 
-            // Mettre à jour les investissements
-            updateMemberInvestments(member.id);
-            
-            // Mettre à jour les transactions en attente
-            updateMemberPendingTransactions(member.id);
-        }
+    // MISE À JOUR DU SOLDE ET DE L'INVESTISSEMENT (Données réelles Supabase)
+    // On utilise les valeurs recalculées par le Trigger SQL (balance et total_invested)
+    document.getElementById('memberBalance').textContent = formatCFA(member.balance || 0);
+    document.getElementById('totalInvested').textContent = formatCFA(member.total_invested || 0);
+    document.getElementById('availableBalance').textContent = formatCFA(member.balance || 0);
+    
+    // Calculer les gains estimés (Basé sur le total investi réel de la base)
+    const expectedReturn = (member.total_invested || 0) * 0.12; // 12% de rendement estimé
+    document.getElementById('expectedReturn').textContent = formatCFA(expectedReturn);
+    
+    // Compter les projets actifs
+    const activeProjectsCount = projects.filter(p => p.status === 'active' || p.status === 'actif').length;
+    document.getElementById('activeProjects').textContent = activeProjectsCount;
 
-        // Mettre à jour les investissements du membre
-        function updateMemberInvestments(memberId) {
-            const tbody = document.getElementById('memberInvestments');
-            if (!tbody) return;
+    // Mettre à jour les tableaux détaillés du membre
+    updateMemberInvestments(member.id);
+    
+    // Vérifier si la fonction existe avant de l'appeler
+    if (typeof updateMemberPendingTransactions === 'function') {
+        updateMemberPendingTransactions(member.id);
+    }
+}
 
-            tbody.innerHTML = '';
+// Mettre à jour les investissements du membre
+function updateMemberInvestments(memberId) {
+    const tbody = document.getElementById('memberInvestments');
+    if (!tbody) return;
 
-            // Filtrer les contributions du membre
-            const memberContributions = contributions.filter(c => c.member_id === memberId);
-            
-            if (memberContributions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucun investissement</td></tr>';
-                return;
-            }
+    tbody.innerHTML = '';
 
-            memberContributions.forEach(contribution => {
-                const project = projects.find(p => p.id == contribution.project_id);
-                if (!project) return;
+    // Filtrer les contributions appartenant au membre (via member_id ou user_id)
+    const memberContributions = contributions.filter(c => c.member_id === memberId || c.user_id === memberId);
+    
+    if (memberContributions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucun investissement trouvé</td></tr>';
+        return;
+    }
 
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${project.name}</td>
-                    <td>${formatCFA(contribution.amount)}</td>
-                    <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
-                    <td>
-                        <span class="status-badge status-cash">
-                            ${contribution.payment_method === 'cash' ? 'Espèces' : 
-                             contribution.payment_method === 'transfer' ? 'Virement' : 
-                             contribution.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}
-                        </span>
-                    </td>
-                    <td>
-                        <span class="status-badge ${contribution.status === 'completed' ? 'status-active' : 'status-pending'}">
-                            ${contribution.status === 'completed' ? 'Validé' : 'En attente'}
-                        </span>
-                    </td>
-                    <td>${project.return_rate || 12}%</td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
+    memberContributions.forEach(contribution => {
+        // Trouver le projet associé pour afficher le nom et le rendement
+        const project = projects.find(p => p.id == contribution.project_id);
+        if (!project) return;
+
+        // GESTION DES STATUTS : On accepte 'completed', 'validated' ou 'validé' pour le badge vert
+        const currentStatus = (contribution.status || '').toLowerCase();
+        const isValide = currentStatus === 'completed' || currentStatus === 'validated' || currentStatus === 'validé';
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${project.name}</td>
+            <td>${formatCFA(contribution.amount)}</td>
+            <td>${new Date(contribution.created_at).toLocaleDateString('fr-FR')}</td>
+            <td>
+                <span class="status-badge status-cash">
+                    ${contribution.payment_method === 'cash' ? 'Espèces' : 
+                      contribution.payment_method === 'transfer' ? 'Virement' : 
+                      contribution.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}
+                </span>
+            </td>
+            <td>
+                <span class="status-badge ${isValide ? 'status-active' : 'status-pending'}">
+                    ${isValide ? 'Validé' : 'En attente'}
+                </span>
+            </td>
+            <td>${project.return_rate || project.yield || 12}%</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
 
         // Mettre à jour les transactions en attente du membre
         function updateMemberPendingTransactions(memberId) {
