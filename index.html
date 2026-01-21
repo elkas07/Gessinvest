@@ -5642,46 +5642,66 @@
                     showNotification(`Investissement de ${formatCFA(transaction.amount)} validé ! Projet mis à jour.`);
                 }
 
-                // 4. Mettre à jour le statut de la transaction
-               const { error: updateStatusError } = await window.supabaseClient
-                    .from('transactions')
-                    .update({ 
-                        status: 'validated',
-                        validated_at: new Date().toISOString()
-                    })
-                    .eq('id', transactionId);
+                // 4. Mettre à jour le statut de la transaction dans Supabase
+const { error: updateStatusError } = await window.supabaseClient
+    .from('transactions')
+    .update({ 
+        status: 'validated', // Assurez-vous que votre Trigger SQL écoute bien 'validated'
+        validated_at: new Date().toISOString()
+    })
+    .eq('id', transactionId);
 
-                if (updateStatusError) throw updateStatusError;
+if (updateStatusError) throw updateStatusError;
 
-                // 5. Retirer la ligne du tableau
-                removeTransactionRow(transactionId);
+// 5. Retirer visuellement la ligne du tableau Admin
+removeTransactionRow(transactionId);
+showNotification('Transaction validée et solde mis à jour', 'success');
 
-               // 6. Attendre un court instant puis mettre à jour les données
+// 6. Attendre que le Trigger SQL termine le calcul (env. 1s) puis rafraîchir
 setTimeout(async () => {
-    await loadPendingTransactions();
-    await loadProjects();
-    await loadContributions();
-    await loadUsers();
+    console.log('🔄 Synchronisation des soldes après validation...');
     
-    // ⭐ AJOUT : Recharger explicitement les données du membre pour le solde
-    if (typeof loadMemberData === 'function') {
-        await loadMemberData(); 
+    // On recharge toutes les données fraîches depuis Supabase
+    await Promise.all([
+        loadPendingTransactions(),
+        loadProjects(),
+        loadContributions(),
+        loadUsers() // Cette fonction remplit votre liste globale d'utilisateurs
+    ]);
+    
+    // 7. MISE À JOUR CRUCIALE DU SOLDE DANS L'INTERFACE
+    if (currentUser) {
+        // On cherche les nouvelles données calculées par le Trigger dans la liste rechargée
+        // 'allUsers' est souvent le nom de la variable globale utilisée par loadUsers()
+        const updatedMember = (typeof allUsers !== 'undefined') 
+            ? allUsers.find(u => u.id === currentUser.id)
+            : null;
+
+        if (updatedMember) {
+            // On met à jour l'objet en mémoire avec les chiffres de la base de données
+            currentUser.balance = updatedMember.balance;
+            currentUser.total_invested = updatedMember.total_invested;
+            console.log('✅ Nouveau solde récupéré:', currentUser.balance);
+        }
     }
-    
-    // 7. Mettre à jour les dashboards
+
+    // 8. Mise à jour finale des Dashboards (Admin ou Membre)
     if (currentUser && currentUser.email === 'elkas07@live.fr') {
-        updateAdminDashboard();
-    } else if (currentUser) {
-        // Cette fonction va maintenant dessiner le dashboard avec le solde à jour
+        if (typeof updateAdminDashboard === 'function') updateAdminDashboard();
+    } 
+    
+    // On appelle systématiquement la mise à jour du dashboard membre pour rafraîchir les compteurs
+    if (typeof updateMemberDashboard === 'function') {
         updateMemberDashboard();
     }
-    
-    // Optionnel : Un petit rafraîchissement automatique si le solde ne bouge pas
+
+    // Si après tout ça le solde ne bouge pas, on force un rafraîchissement propre
     // window.location.reload(); 
 
-}, 1000);
-                
-                console.log('✅ Transaction validée avec succès:', transactionId);
+}, 1200); 
+
+console.log('✅ Processus de validation terminé pour:', transactionId);
+               
                 
             } catch (error) {
                 console.error('❌ Erreur validation transaction:', error);
