@@ -5864,85 +5864,43 @@ const newProject = {
                     showNotification(`Investissement de ${formatCFA(transaction.amount)} validé ! Projet mis à jour.`);
                 }
 
-                // 4. Mettre à jour le statut de la transaction dans Supabase
-                const { error: updateStatusError } = await window.supabaseClient
+                // 4. Mettre à jour le statut de la transaction
+               const { error: updateStatusError } = await window.supabaseClient
                     .from('transactions')
                     .update({ 
-                        status: 'validated', 
+                        status: 'validated',
                         validated_at: new Date().toISOString()
                     })
                     .eq('id', transactionId);
 
                 if (updateStatusError) throw updateStatusError;
 
-                // 5. Retirer la ligne du tableau visuellement
+                // 5. Retirer la ligne du tableau
                 removeTransactionRow(transactionId);
 
-                // 6. Attendre un court instant (1.5s) pour laisser le temps au Trigger SQL de finir
+                // 6. Attendre un court instant puis mettre à jour les données
                 setTimeout(async () => {
-                    console.log('🔄 Synchronisation forcée des données en cours...');
+                    await loadPendingTransactions();
+                    await loadProjects();
+                    await loadContributions();
+                    await loadUsers();
                     
-                    // Rechargement des données brutes
-                    await Promise.all([
-                        loadPendingTransactions(),
-                        loadProjects(),
-                        loadContributions(),
-                        loadUsers()
-                    ]);
-
-                    // ⭐ CRUCIAL : Mettre à jour manuellement l'objet currentUser avec les chiffres réels
-                    if (currentUser) {
-                        // On cherche le membre dans la liste users mise à jour (total 8 selon vos logs)
-                        const freshUserData = (typeof users !== 'undefined' ? users : allUsers)
-                            .find(u => u.id === currentUser.id || u.email === currentUser.email);
-                        
-                        if (freshUserData) {
-                            // On injecte les valeurs réelles de la base (ex: 70 000 CFA investi)
-                            currentUser.balance = freshUserData.balance;
-                            currentUser.total_invested = freshUserData.total_invested;
-                            
-                            // Recalcul manuel des "Gains estimés" pour l'affichage
-                            const validContribs = allContributions.filter(c => 
-                                (c.member_id === currentUser.id || c.user_id === currentUser.id) && 
-                                (c.status === 'validé' || c.status === 'validated')
-                            );
-                            
-                            currentUser.gains_estimes = validContribs.reduce((sum, c) => {
-                                const project = allProjects.find(p => p.id === c.project_id);
-                                const yieldRate = project ? (parseFloat(project.yield || project.rendement) / 100) : 0;
-                                return sum + (c.amount * yieldRate);
-                            }, 0);
-                            
-                            console.log('💰 Données synchronisées avec succès :', {
-                                balance: currentUser.balance,
-                                total_invested: currentUser.total_invested
-                            });
-                        }
-                    }
-
-                    // 7. Mettre à jour l'affichage des dashboards
+                    // 7. Mettre à jour les dashboards
                     if (currentUser && currentUser.email === 'elkas07@live.fr') {
-                        if (typeof updateAdminDashboard === 'function') updateAdminDashboard();
-                    } 
-                    
-                    // Cette fonction est indispensable pour réécrire les chiffres dans les blocs blancs
-                    if (typeof updateMemberDashboard === 'function') {
+                        updateAdminDashboard();
+                    } else if (currentUser) {
                         updateMemberDashboard();
-                    } else {
-                        // Si le dashboard ne réagit toujours pas, on force un rafraîchissement
-                        window.location.reload();
                     }
-                }, 1500); 
+                }, 1000); 
                 
-                console.log('✅ Transaction validée et dashboard synchronisé:', transactionId);
+                console.log('✅ Transaction validée avec succès:', transactionId);
                 
             } catch (error) {
                 console.error('❌ Erreur validation transaction:', error);
-                if (typeof showNotification === 'function') {
-                    showNotification('Erreur lors de la validation: ' + error.message, 'error');
-                }
+                showNotification('Erreur lors de la validation: ' + error.message, 'error');
             }
-			
+        }
+
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une transaction
         async function rejectTransaction(transactionId) {
             if (!isSupabaseConnected || !window.supabaseClient) {
