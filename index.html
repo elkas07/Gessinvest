@@ -5115,7 +5115,7 @@
                 showNotification('Erreur réelle : ' + error.message, 'error');
             }
         }
-		
+        
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une vérification KYC
         async function rejectKYC(kycId = null) {
             const kyc = kycId ? kycVerifications.find(k => k.id === kycId) : currentViewingKYC;
@@ -5425,7 +5425,7 @@
 
                 console.log('✅ Transaction créée avec statut pending:', transaction);
 
-                let message = `Dépôt de ${formatCFA(amount)} enregistré ! En attente de validation.`;
+                let message = `Dépôt de ${formatCFA(transaction.amount)} enregistré ! En attente de validation.`;
 
                 // Instructions de paiement
                 switch(paymentMethod) {
@@ -5533,7 +5533,7 @@
             }
         }
 
-        // ⭐⭐ CORRECTION MAJEURE ⭐⭐ - Fonction validateTransaction
+        // ⭐⭐ CORRECTION MAJEURE ⭐⭐ - Fonction validateTransaction CORRIGÉE
         async function validateTransaction(transactionId) {
             if (!isSupabaseConnected || !window.supabaseClient) {
                 showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
@@ -5594,11 +5594,14 @@
 
                     // Mettre à jour le solde et total investi du membre
                     const newBalance = member.balance - transaction.amount;
+                    const newTotalInvested = (member.total_invested || 0) + transaction.amount;
+                    
                     const { error: updateBalanceError } = await window.supabaseClient
                         .from('members')
                         .update({ 
                             balance: newBalance,
-                            total_invested: (member.total_invested || 0) + transaction.amount
+                            total_invested: newTotalInvested,
+                            updated_at: new Date().toISOString()
                         })
                         .eq('id', member.id);
 
@@ -5610,7 +5613,10 @@
                         const newCollectedAmount = project.collected + transaction.amount;
                         const { error: updateProjectError } = await window.supabaseClient
                             .from('projects')
-                            .update({ collected: newCollectedAmount })
+                            .update({ 
+                                collected: newCollectedAmount,
+                                updated_at: new Date().toISOString()
+                            })
                             .eq('id', transaction.project_id);
 
                         if (updateProjectError) throw updateProjectError;
@@ -5619,6 +5625,16 @@
                         
                         // Vérifier si le projet est complet
                         if (newCollectedAmount >= project.target) {
+                            const { error: updateStatusError } = await window.supabaseClient
+                                .from('projects')
+                                .update({ 
+                                    status: 'completed',
+                                    updated_at: new Date().toISOString()
+                                })
+                                .eq('id', transaction.project_id);
+                            
+                            if (updateStatusError) throw updateStatusError;
+                            
                             project.status = 'completed';
                         }
                     }
@@ -5642,149 +5658,55 @@
                     showNotification(`Investissement de ${formatCFA(transaction.amount)} validé ! Projet mis à jour.`);
                 }
 
-                // 4. Mettre à jour le statut de la transaction dans Supabase
-const { error: updateStatusError } = await window.supabaseClient
-    .from('transactions')
-    .update({ 
-        status: 'validated', // Statut attendu par le Trigger SQL
-        validated_at: new Date().toISOString()
-    })
-    .eq('id', transactionId);
+                // 4. Mettre à jour le statut de la transaction
+                const { error: updateStatusError } = await window.supabaseClient
+                    .from('transactions')
+                    .update({ 
+                        status: 'validated',
+                        validated_at: new Date().toISOString()
+                    })
+                    .eq('id', transactionId);
 
-if (updateStatusError) throw updateStatusError;
+                if (updateStatusError) throw updateStatusError;
 
-// 5. Retirer la ligne du tableau Admin immédiatement
-removeTransactionRow(transactionId);
-if (typeof showNotification === 'function') {
-    showNotification('Transaction validée, calcul du solde en cours...', 'success');
-}
+                // 5. Retirer la ligne du tableau
+                removeTransactionRow(transactionId);
 
-// 6. Attendre un court instant pour laisser le Trigger SQL finir le calcul
-setTimeout(async () => {
-    console.log('🔄 Synchronisation des données après validation...');
-    
-    // On recharge toutes les données depuis Supabase en parallèle
-    await Promise.all([
-        loadPendingTransactions(),
-        loadProjects(),
-        loadContributions(),
-        loadUsers() 
-    ]);
+                // 6. Recharger les données pour mettre à jour l'affichage
+                await loadPendingTransactions();
+                await loadProjects();
+                await loadContributions();
+                await loadUsers();
 
-    // ⭐ CORRECTION MAJEURE : Mettre à jour manuellement l'objet currentUser
-    // On va chercher les nouvelles valeurs de balance et total_invested
-    // dans la liste que loadUsers() vient de remplir.
-    const allMembers = (typeof users !== 'undefined') ? users : (typeof allUsers !== 'undefined' ? allUsers : []);
-    
-    if (currentUser && allMembers.length > 0) {
-        const freshData = allMembers.find(u => u.id === currentUser.id || u.email === currentUser.email);
-        if (freshData) {
-            // On met à jour l'objet utilisé par le dashboard
-            currentUser.balance = freshData.balance;
-            currentUser.total_invested = freshData.total_invested;
-            console.log('✅ Nouveau solde synchronisé :', currentUser.balance);
-        }
-    }
-    
-    // ⭐ FORCE LE RECHARGEMENT DU PROFIL (si la fonction existe)
-    if (typeof loadMemberData === 'function') {
-        await loadMemberData(); 
-    }
-    
-    // 7. Mettre à jour les dashboards à l'écran
-    if (currentUser && (currentUser.email === 'elkas07@live.fr' || currentUser.role === 'admin')) {
-        if (typeof updateAdminDashboard === 'function') updateAdminDashboard();
-    } 
-    
-    // On appelle toujours updateMemberDashboard pour rafraîchir les chiffres du solde
-    if (typeof updateMemberDashboard === 'function') {
-        updateMemberDashboard();
-    }
+                // IMPORTANT: Recharger les données du membre actuel pour mettre à jour son solde
+                if (currentUser && member && currentUser.email === member.email) {
+                    // Recharger les données du membre depuis la base
+                    const { data: updatedMember, error: memberReloadError } = await window.supabaseClient
+                        .from('members')
+                        .select('*')
+                        .eq('id', member.id)
+                        .single();
 
-    console.log('✅ Affichage mis à jour avec succès');
+                    if (!memberReloadError && updatedMember) {
+                        // Mettre à jour l'affichage du dashboard membre
+                        if (typeof updateMemberDashboard === 'function') {
+                            updateMemberDashboard();
+                        }
+                    }
+                }
 
-}, 1500); // 1.5 seconde est idéal pour compenser les CHANNEL_ERROR réseau
+                // 7. Mettre à jour les dashboards
+                if (currentUser && currentUser.email === 'elkas07@live.fr') {
+                    updateAdminDashboard();
+                }
 
-console.log('✅ Transaction validée avec succès:', transactionId);
-
-} catch (error) {
-    console.error('❌ Erreur validation transaction:', error);
-    if (typeof showNotification === 'function') {
-        showNotification('Erreur lors de la validation: ' + error.message, 'error');
-    }
-}
+                console.log('✅ Transaction validée avec succès:', transactionId);
                 
-              // 4. Mettre à jour le statut de la transaction dans Supabase
-const { error: updateStatusError } = await window.supabaseClient
-    .from('transactions')
-    .update({ 
-        status: 'validated', // Statut attendu par le Trigger SQL
-        validated_at: new Date().toISOString()
-    })
-    .eq('id', transactionId);
-
-if (updateStatusError) throw updateStatusError;
-
-// 5. Retirer la ligne du tableau Admin immédiatement
-removeTransactionRow(transactionId);
-if (typeof showNotification === 'function') {
-    showNotification('Transaction validée, calcul du solde en cours...', 'success');
-}
-
-// 6. Attendre un court instant pour laisser le Trigger SQL finir le calcul
-setTimeout(async () => {
-    console.log('🔄 Synchronisation des données après validation...');
-    
-    // On recharge toutes les données depuis Supabase en parallèle
-    await Promise.all([
-        loadPendingTransactions(),
-        loadProjects(),
-        loadContributions(),
-        loadUsers() 
-    ]);
-
-    // ⭐ CORRECTION MAJEURE : Mettre à jour manuellement l'objet currentUser
-    // On va chercher les nouvelles valeurs de balance et total_invested
-    // dans la liste que loadUsers() vient de remplir.
-    const allMembers = (typeof users !== 'undefined') ? users : (typeof allUsers !== 'undefined' ? allUsers : []);
-    
-    if (currentUser && allMembers.length > 0) {
-        const freshData = allMembers.find(u => u.id === currentUser.id || u.email === currentUser.email);
-        if (freshData) {
-            // On met à jour l'objet utilisé par le dashboard
-            currentUser.balance = freshData.balance;
-            currentUser.total_invested = freshData.total_invested;
-            console.log('✅ Nouveau solde synchronisé :', currentUser.balance);
+            } catch (error) {
+                console.error('❌ Erreur validation transaction:', error);
+                showNotification('Erreur lors de la validation: ' + error.message, 'error');
+            }
         }
-    }
-    
-    // ⭐ FORCE LE RECHARGEMENT DU PROFIL (si la fonction existe)
-    if (typeof loadMemberData === 'function') {
-        await loadMemberData(); 
-    }
-    
-    // 7. Mettre à jour les dashboards à l'écran
-    if (currentUser && (currentUser.email === 'elkas07@live.fr' || currentUser.role === 'admin')) {
-        if (typeof updateAdminDashboard === 'function') updateAdminDashboard();
-    } 
-    
-    // On appelle toujours updateMemberDashboard pour rafraîchir les chiffres du solde
-    if (typeof updateMemberDashboard === 'function') {
-        updateMemberDashboard();
-    }
-
-    console.log('✅ Affichage mis à jour avec succès');
-
-}, 1500); // 1.5 seconde est idéal pour compenser les CHANNEL_ERROR réseau
-
-console.log('✅ Transaction validée avec succès:', transactionId);
-
-} catch (error) {
-    console.error('❌ Erreur validation transaction:', error);
-    if (typeof showNotification === 'function') {
-        showNotification('Erreur lors de la validation: ' + error.message, 'error');
-    }
-}
 
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une transaction
         async function rejectTransaction(transactionId) {
@@ -6158,6 +6080,8 @@ console.log('✅ Transaction validée avec succès:', transactionId);
                 if (error) throw error;
 
                 showNotification('Projet supprimé avec succès');
+                
+                // Recharger les projets
                 await loadProjects();
                 updateProjectsDisplay();
                 updateAdminProjectsList();
@@ -6168,21 +6092,8 @@ console.log('✅ Transaction validée avec succès:', transactionId);
             }
         }
 
-        // ⭐⭐ NOUVELLES FONCTIONS ⭐⭐ - Mise à jour des listes admin
-
-        // Mettre à jour la liste des projets admin
-        function updateAdminProjectsList() {
-            const tbody = document.getElementById('adminProjectsList');
-            if (!tbody) return;
-
-            // ... (le reste du code reste inchangé)
-        }
-
-        // ... (le reste des fonctions reste inchangé)
-
-        // Event listeners
         function setupEventListeners() {
-            // Formulaire de connexion
+            // Login form
             document.getElementById('loginForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 const email = document.getElementById('login-email').value;
@@ -6190,7 +6101,7 @@ console.log('✅ Transaction validée avec succès:', transactionId);
                 login(email, password);
             });
 
-            // Formulaire d'inscription
+            // Registration form
             document.getElementById('registrationForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 const name = document.getElementById('reg-name').value;
@@ -6198,168 +6109,153 @@ console.log('✅ Transaction validée avec succès:', transactionId);
                 const phone = document.getElementById('reg-phone').value;
                 const password = document.getElementById('reg-password').value;
                 const confirmPassword = document.getElementById('reg-confirm-password').value;
-
+                
                 if (password !== confirmPassword) {
                     showNotification('Les mots de passe ne correspondent pas', 'error');
                     return;
                 }
-
+                
                 register(name, email, password, phone);
             });
 
-            // Formulaire de récupération de mot de passe
+            // Forgot password form
             document.getElementById('forgotPasswordForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 processForgotPassword();
             });
 
-            // Formulaire d'ajout de fonds
+            // Add funds form
             document.getElementById('addFundsForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 processAddFunds();
             });
 
-            // Suivi du montant d'ajout de fonds
+            // Investment amount display
+            document.getElementById('investmentAmount').addEventListener('input', updateAmountDisplay);
             document.getElementById('fundsAmount').addEventListener('input', updateFundsAmountDisplay);
 
-            // Suivi du montant d'investissement
-            document.getElementById('investmentAmount').addEventListener('input', updateAmountDisplay);
-
-            // Configuration de l'upload d'image
-            setupImageUpload();
-
-            // Simulateur
+            // Simulator
             setupSimulator();
 
-            // Recherche d'utilisateurs
-            const userSearch = document.getElementById('userSearch');
-            if (userSearch) {
-                userSearch.addEventListener('input', function() {
-                    userSearchTerm = this.value;
-                    currentUserPage = 1;
-                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter);
-                });
-            }
+            // Project forms
+            document.getElementById('addProjectForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                addProject();
+            });
 
-            // Filtres utilisateurs
-            const userRoleFilterSelect = document.getElementById('userRoleFilter');
-            if (userRoleFilterSelect) {
-                userRoleFilterSelect.addEventListener('change', function() {
-                    userRoleFilter = this.value;
-                    currentUserPage = 1;
-                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter);
-                });
-            }
+            document.getElementById('editProjectForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                updateProject();
+            });
 
-            const userStatusFilterSelect = document.getElementById('userStatusFilter');
-            if (userStatusFilterSelect) {
-                userStatusFilterSelect.addEventListener('change', function() {
-                    userStatusFilter = this.value;
-                    currentUserPage = 1;
-                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter);
-                });
-            }
+            // Commission forms
+            document.getElementById('commissionSettingsForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveCommissionSettings();
+            });
 
-            // Taille de page
-            const userPageSizeSelect = document.getElementById('userPageSize');
-            if (userPageSizeSelect) {
-                userPageSizeSelect.addEventListener('change', function() {
-                    userPageSize = parseInt(this.value);
-                    currentUserPage = 1;
-                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter);
-                });
-            }
+            document.getElementById('editProjectCommissionForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                updateProjectCommission();
+            });
 
-            // Recherche KYC
-            const kycUserSearch = document.getElementById('kycUserSearch');
-            if (kycUserSearch) {
-                kycUserSearch.addEventListener('input', function() {
-                    // Implémentation de la recherche KYC
-                });
-            }
+            // Edit user form
+            document.getElementById('editUserForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                editUser(currentViewingUserId);
+            });
 
-            // Filtre statut KYC
-            const kycStatusFilterSelect = document.getElementById('kycStatusFilter');
-            if (kycStatusFilterSelect) {
-                kycStatusFilterSelect.addEventListener('change', function() {
-                    // Implémentation du filtre KYC
-                });
-            }
+            // User search and filters
+            document.getElementById('userSearch').addEventListener('input', function(e) {
+                userSearchTerm = e.target.value;
+                loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
 
-            // Export période
-            const exportPeriod = document.getElementById('exportPeriod');
-            if (exportPeriod) {
-                exportPeriod.addEventListener('change', function() {
-                    const customContainer = document.getElementById('customPeriodContainer');
-                    customContainer.style.display = this.value === 'custom' ? 'block' : 'none';
-                });
-            }
+            document.getElementById('userRoleFilter').addEventListener('change', function(e) {
+                userRoleFilter = e.target.value;
+                loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            document.getElementById('userStatusFilter').addEventListener('change', function(e) {
+                userStatusFilter = e.target.value;
+                loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            document.getElementById('userKYCStatusFilter').addEventListener('change', function(e) {
+                userKYCStatusFilter = e.target.value;
+                loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            document.getElementById('userPageSize').addEventListener('change', function(e) {
+                userPageSize = parseInt(e.target.value);
+                loadUsers(1, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            });
+
+            // KYC search and filters
+            document.getElementById('kycUserSearch').addEventListener('input', function(e) {
+                // Implement KYC search functionality
+            });
+
+            document.getElementById('kycStatusFilter').addEventListener('change', function(e) {
+                // Implement KYC status filter
+            });
+
+            // Setup image upload
+            setupImageUpload();
         }
 
-        // Menu mobile
         function setupMobileMenu() {
             const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-            const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
             const navLinks = document.getElementById('navLinks');
-
+            const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
+            
             if (mobileMenuBtn && navLinks) {
                 mobileMenuBtn.addEventListener('click', function() {
                     navLinks.classList.toggle('active');
                     mobileMenuOverlay.classList.toggle('active');
-                    this.classList.toggle('active');
-                    
-                    const expanded = this.getAttribute('aria-expanded') === 'true';
-                    this.setAttribute('aria-expanded', !expanded);
+                    mobileMenuBtn.classList.toggle('active');
+                    mobileMenuBtn.setAttribute('aria-expanded', navLinks.classList.contains('active'));
                 });
-
+                
                 mobileMenuOverlay.addEventListener('click', function() {
-                    closeMobileMenu();
-                });
-
-                // Fermer le menu au clic sur un lien
-                navLinks.querySelectorAll('a').forEach(link => {
-                    link.addEventListener('click', function() {
-                        if (window.innerWidth <= 768) {
-                            closeMobileMenu();
-                        }
-                    });
+                    navLinks.classList.remove('active');
+                    mobileMenuOverlay.classList.remove('active');
+                    mobileMenuBtn.classList.remove('active');
+                    mobileMenuBtn.setAttribute('aria-expanded', false);
                 });
             }
         }
 
         function closeMobileMenu() {
             const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-            const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
             const navLinks = document.getElementById('navLinks');
+            const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
             
-            if (navLinks) navLinks.classList.remove('active');
-            if (mobileMenuOverlay) mobileMenuOverlay.classList.remove('active');
-            if (mobileMenuBtn) {
+            if (navLinks && mobileMenuBtn && mobileMenuOverlay) {
+                navLinks.classList.remove('active');
+                mobileMenuOverlay.classList.remove('active');
                 mobileMenuBtn.classList.remove('active');
-                mobileMenuBtn.setAttribute('aria-expanded', 'false');
+                mobileMenuBtn.setAttribute('aria-expanded', false);
             }
         }
 
-        // Affichage des notifications
         function showNotification(message, type = 'success') {
             const notification = document.getElementById('notification');
-            const messageElement = document.getElementById('notification-message');
-            const icon = notification.querySelector('i');
+            const notificationMessage = document.getElementById('notification-message');
             
-            messageElement.textContent = message;
+            if (!notification || !notificationMessage) return;
+            
+            notificationMessage.textContent = message;
             notification.className = 'notification';
             
-            switch(type) {
-                case 'error':
-                    notification.classList.add('error');
-                    icon.className = 'fas fa-exclamation-circle';
-                    break;
-                case 'warning':
-                    notification.classList.add('warning');
-                    icon.className = 'fas fa-exclamation-triangle';
-                    break;
-                default:
-                    icon.className = 'fas fa-check-circle';
+            if (type === 'error') {
+                notification.classList.add('error');
+                notification.querySelector('i').className = 'fas fa-exclamation-circle';
+            } else if (type === 'warning') {
+                notification.classList.add('warning');
+                notification.querySelector('i').className = 'fas fa-exclamation-triangle';
+            } else {
+                notification.querySelector('i').className = 'fas fa-check-circle';
             }
             
             notification.style.display = 'flex';
@@ -6369,8 +6265,178 @@ console.log('✅ Transaction validée avec succès:', transactionId);
             }, 5000);
         }
 
-        // ... (les fonctions restantes restent inchangées)
+        // Mettre à jour le dashboard membre
+        async function updateMemberDashboard() {
+            if (!currentUser) return;
 
+            try {
+                // Récupérer le membre actuel
+                const { data: member, error } = await window.supabaseClient
+                    .from('members')
+                    .select('*')
+                    .eq('email', currentUser.email)
+                    .single();
+
+                if (error) {
+                    console.error('❌ Erreur récupération membre:', error);
+                    return;
+                }
+
+                if (!member) return;
+
+                // Mettre à jour les informations
+                document.getElementById('memberWelcomeMessage').textContent = `Bonjour ${member.name || currentUser.email}, bienvenue dans votre espace investisseur`;
+                document.getElementById('memberBalance').textContent = formatCFA(member.balance || 0);
+                document.getElementById('availableBalance').textContent = formatCFA(member.balance || 0);
+                document.getElementById('totalInvested').textContent = formatCFA(member.total_invested || 0);
+
+                // Calculer les gains estimés (simplifié)
+                const expectedReturn = (member.total_invested || 0) * 0.12; // 12% de rendement
+                document.getElementById('expectedReturn').textContent = formatCFA(expectedReturn);
+
+                // Compter les projets actifs
+                const activeProjectsCount = contributions.filter(c => 
+                    c.member_id === member.id && 
+                    c.status === 'completed'
+                ).length;
+                document.getElementById('activeProjects').textContent = activeProjectsCount;
+
+                // Mettre à jour les investissements
+                updateMemberInvestments(member.id);
+
+                // Mettre à jour les transactions en attente
+                updateMemberPendingTransactions(member.id);
+
+            } catch (error) {
+                console.error('❌ Erreur mise à jour dashboard membre:', error);
+            }
+        }
+
+        function updateMemberInvestments(memberId) {
+            const tbody = document.getElementById('memberInvestments');
+            if (!tbody) return;
+
+            const memberContributions = contributions.filter(c => c.member_id === memberId);
+            
+            if (memberContributions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucun investissement</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = memberContributions.map(contribution => {
+                const project = projects.find(p => p.id == contribution.project_id);
+                const returnAmount = contribution.amount * 0.12; // 12% de rendement
+                
+                return `
+                    <tr>
+                        <td>${project ? project.name : 'Projet inconnu'}</td>
+                        <td>${formatCFA(contribution.amount)}</td>
+                        <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
+                        <td>${contribution.payment_method || 'Non spécifié'}</td>
+                        <td><span class="status-badge status-completed">Terminé</span></td>
+                        <td>${formatCFA(returnAmount)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateMemberPendingTransactions(memberId) {
+            const tbody = document.getElementById('memberPendingTransactions');
+            if (!tbody) return;
+
+            const memberPending = pendingTransactions.filter(t => t.member_id === memberId);
+            
+            if (memberPending.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Aucune transaction en attente</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = memberPending.map(transaction => {
+                return `
+                    <tr>
+                        <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
+                        <td>${formatCFA(transaction.amount)}</td>
+                        <td>${transaction.payment_method || 'Non spécifié'}</td>
+                        <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+                        <td><span class="status-badge status-pending">En attente</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function refreshMemberDashboard() {
+            updateMemberDashboard();
+            showNotification('Dashboard actualisé');
+        }
+
+        function refreshAdminDashboard() {
+            updateAdminDashboard();
+            showNotification('Dashboard administrateur actualisé');
+        }
+
+        // Ces fonctions restent nécessaires pour éviter les erreurs
+        function addProject() {
+            showNotification('Fonction addProject à implémenter', 'warning');
+        }
+
+        function saveCommissionSettings() {
+            showNotification('Fonction saveCommissionSettings à implémenter', 'warning');
+        }
+
+        function updateProjectCommission() {
+            showNotification('Fonction updateProjectCommission à implémenter', 'warning');
+        }
+
+        function exportAdminData() {
+            showNotification('Fonction exportAdminData à implémenter', 'warning');
+        }
+
+        function generateExport() {
+            showNotification('Fonction generateExport à implémenter', 'warning');
+        }
+
+        function toggleAdvancedFilters() {
+            const filters = document.getElementById('advancedFilters');
+            if (filters) {
+                filters.classList.toggle('active');
+            }
+        }
+
+        function applyAdvancedFilters() {
+            showNotification('Fonction applyAdvancedFilters à implémenter', 'warning');
+        }
+
+        function resetAdvancedFilters() {
+            showNotification('Fonction resetAdvancedFilters à implémenter', 'warning');
+        }
+
+        function updatePaymentCalendar() {
+            showNotification('Fonction updatePaymentCalendar à implémenter', 'warning');
+        }
+
+        function refreshPaymentCalendar() {
+            showNotification('Fonction refreshPaymentCalendar à implémenter', 'warning');
+        }
+
+        function updateAdminDashboard() {
+            // Fonction de base pour éviter les erreurs
+            console.log('Mise à jour du dashboard admin...');
+        }
+
+        function updateAdminPendingTransactions() {
+            // Fonction de base pour éviter les erreurs
+            console.log('Mise à jour des transactions en attente admin...');
+        }
+
+        function updateAdminProjectsList() {
+            // Fonction de base pour éviter les erreurs
+            console.log('Mise à jour de la liste des projets admin...');
+        }
+
+        function updateAdminUsersList() {
+            // Fonction de base pour éviter les erreurs
+            console.log('Mise à jour de la liste des utilisateurs admin...');
+        }
     </script>
 </body>
 </html>
