@@ -5646,68 +5646,145 @@
 const { error: updateStatusError } = await window.supabaseClient
     .from('transactions')
     .update({ 
-        status: 'validated', // Assurez-vous que votre Trigger SQL écoute bien 'validated'
+        status: 'validated', // Statut attendu par le Trigger SQL
         validated_at: new Date().toISOString()
     })
     .eq('id', transactionId);
 
 if (updateStatusError) throw updateStatusError;
 
-// 5. Retirer visuellement la ligne du tableau Admin
+// 5. Retirer la ligne du tableau Admin immédiatement
 removeTransactionRow(transactionId);
-showNotification('Transaction validée et solde mis à jour', 'success');
+if (typeof showNotification === 'function') {
+    showNotification('Transaction validée, calcul du solde en cours...', 'success');
+}
 
-// 6. Attendre que le Trigger SQL termine le calcul (env. 1s) puis rafraîchir
+// 6. Attendre un court instant pour laisser le Trigger SQL finir le calcul
 setTimeout(async () => {
-    console.log('🔄 Synchronisation des soldes après validation...');
+    console.log('🔄 Synchronisation des données après validation...');
     
-    // On recharge toutes les données fraîches depuis Supabase
+    // On recharge toutes les données depuis Supabase en parallèle
     await Promise.all([
         loadPendingTransactions(),
         loadProjects(),
         loadContributions(),
-        loadUsers() // Cette fonction remplit votre liste globale d'utilisateurs
+        loadUsers() 
     ]);
-    
-    // 7. MISE À JOUR CRUCIALE DU SOLDE DANS L'INTERFACE
-    if (currentUser) {
-        // On cherche les nouvelles données calculées par le Trigger dans la liste rechargée
-        // 'allUsers' est souvent le nom de la variable globale utilisée par loadUsers()
-        const updatedMember = (typeof allUsers !== 'undefined') 
-            ? allUsers.find(u => u.id === currentUser.id)
-            : null;
 
-        if (updatedMember) {
-            // On met à jour l'objet en mémoire avec les chiffres de la base de données
-            currentUser.balance = updatedMember.balance;
-            currentUser.total_invested = updatedMember.total_invested;
-            console.log('✅ Nouveau solde récupéré:', currentUser.balance);
+    // ⭐ CORRECTION MAJEURE : Mettre à jour manuellement l'objet currentUser
+    // On va chercher les nouvelles valeurs de balance et total_invested
+    // dans la liste que loadUsers() vient de remplir.
+    const allMembers = (typeof users !== 'undefined') ? users : (typeof allUsers !== 'undefined' ? allUsers : []);
+    
+    if (currentUser && allMembers.length > 0) {
+        const freshData = allMembers.find(u => u.id === currentUser.id || u.email === currentUser.email);
+        if (freshData) {
+            // On met à jour l'objet utilisé par le dashboard
+            currentUser.balance = freshData.balance;
+            currentUser.total_invested = freshData.total_invested;
+            console.log('✅ Nouveau solde synchronisé :', currentUser.balance);
         }
     }
-
-    // 8. Mise à jour finale des Dashboards (Admin ou Membre)
-    if (currentUser && currentUser.email === 'elkas07@live.fr') {
+    
+    // ⭐ FORCE LE RECHARGEMENT DU PROFIL (si la fonction existe)
+    if (typeof loadMemberData === 'function') {
+        await loadMemberData(); 
+    }
+    
+    // 7. Mettre à jour les dashboards à l'écran
+    if (currentUser && (currentUser.email === 'elkas07@live.fr' || currentUser.role === 'admin')) {
         if (typeof updateAdminDashboard === 'function') updateAdminDashboard();
     } 
     
-    // On appelle systématiquement la mise à jour du dashboard membre pour rafraîchir les compteurs
+    // On appelle toujours updateMemberDashboard pour rafraîchir les chiffres du solde
     if (typeof updateMemberDashboard === 'function') {
         updateMemberDashboard();
     }
 
-    // Si après tout ça le solde ne bouge pas, on force un rafraîchissement propre
-    // window.location.reload(); 
+    console.log('✅ Affichage mis à jour avec succès');
 
-}, 1200); 
+}, 1500); // 1.5 seconde est idéal pour compenser les CHANNEL_ERROR réseau
 
-console.log('✅ Processus de validation terminé pour:', transactionId);
-               
+console.log('✅ Transaction validée avec succès:', transactionId);
+
+} catch (error) {
+    console.error('❌ Erreur validation transaction:', error);
+    if (typeof showNotification === 'function') {
+        showNotification('Erreur lors de la validation: ' + error.message, 'error');
+    }
+}
                 
-            } catch (error) {
-                console.error('❌ Erreur validation transaction:', error);
-                showNotification('Erreur lors de la validation: ' + error.message, 'error');
-            }
+              // 4. Mettre à jour le statut de la transaction dans Supabase
+const { error: updateStatusError } = await window.supabaseClient
+    .from('transactions')
+    .update({ 
+        status: 'validated', // Statut attendu par le Trigger SQL
+        validated_at: new Date().toISOString()
+    })
+    .eq('id', transactionId);
+
+if (updateStatusError) throw updateStatusError;
+
+// 5. Retirer la ligne du tableau Admin immédiatement
+removeTransactionRow(transactionId);
+if (typeof showNotification === 'function') {
+    showNotification('Transaction validée, calcul du solde en cours...', 'success');
+}
+
+// 6. Attendre un court instant pour laisser le Trigger SQL finir le calcul
+setTimeout(async () => {
+    console.log('🔄 Synchronisation des données après validation...');
+    
+    // On recharge toutes les données depuis Supabase en parallèle
+    await Promise.all([
+        loadPendingTransactions(),
+        loadProjects(),
+        loadContributions(),
+        loadUsers() 
+    ]);
+
+    // ⭐ CORRECTION MAJEURE : Mettre à jour manuellement l'objet currentUser
+    // On va chercher les nouvelles valeurs de balance et total_invested
+    // dans la liste que loadUsers() vient de remplir.
+    const allMembers = (typeof users !== 'undefined') ? users : (typeof allUsers !== 'undefined' ? allUsers : []);
+    
+    if (currentUser && allMembers.length > 0) {
+        const freshData = allMembers.find(u => u.id === currentUser.id || u.email === currentUser.email);
+        if (freshData) {
+            // On met à jour l'objet utilisé par le dashboard
+            currentUser.balance = freshData.balance;
+            currentUser.total_invested = freshData.total_invested;
+            console.log('✅ Nouveau solde synchronisé :', currentUser.balance);
         }
+    }
+    
+    // ⭐ FORCE LE RECHARGEMENT DU PROFIL (si la fonction existe)
+    if (typeof loadMemberData === 'function') {
+        await loadMemberData(); 
+    }
+    
+    // 7. Mettre à jour les dashboards à l'écran
+    if (currentUser && (currentUser.email === 'elkas07@live.fr' || currentUser.role === 'admin')) {
+        if (typeof updateAdminDashboard === 'function') updateAdminDashboard();
+    } 
+    
+    // On appelle toujours updateMemberDashboard pour rafraîchir les chiffres du solde
+    if (typeof updateMemberDashboard === 'function') {
+        updateMemberDashboard();
+    }
+
+    console.log('✅ Affichage mis à jour avec succès');
+
+}, 1500); // 1.5 seconde est idéal pour compenser les CHANNEL_ERROR réseau
+
+console.log('✅ Transaction validée avec succès:', transactionId);
+
+} catch (error) {
+    console.error('❌ Erreur validation transaction:', error);
+    if (typeof showNotification === 'function') {
+        showNotification('Erreur lors de la validation: ' + error.message, 'error');
+    }
+}
 
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une transaction
         async function rejectTransaction(transactionId) {
