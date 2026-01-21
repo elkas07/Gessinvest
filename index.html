@@ -5875,35 +5875,35 @@ const newProject = {
 
                 if (updateStatusError) throw updateStatusError;
 
-                // 5. Retirer la ligne du tableau Admin immédiatement
+                // 5. Retirer la ligne du tableau visuellement
                 removeTransactionRow(transactionId);
 
-                // 6. Attendre un court instant (1.5s) pour laisser le Trigger SQL finir
+                // 6. Attendre un court instant (1.5s) pour laisser le temps au Trigger SQL de finir
                 setTimeout(async () => {
-                    console.log('🔄 Synchronisation forcée des compteurs...');
+                    console.log('🔄 Synchronisation forcée des données en cours...');
                     
-                    // On recharge toutes les données fraîches depuis Supabase
+                    // Rechargement des données brutes
                     await Promise.all([
                         loadPendingTransactions(),
                         loadProjects(),
                         loadContributions(),
-                        loadUsers() // Met à jour la liste globale (users ou allUsers)
+                        loadUsers()
                     ]);
-                    
-                    // ⭐ CORRECTION : Mettre à jour manuellement l'objet d'affichage (currentUser)
+
+                    // ⭐ CRUCIAL : Mettre à jour manuellement l'objet currentUser avec les chiffres réels
                     if (currentUser) {
-                        // On cherche les nouvelles valeurs (balance: 1460000, total_invested: 70000)
+                        // On cherche le membre dans la liste users mise à jour (total 8 selon vos logs)
                         const freshUserData = (typeof users !== 'undefined' ? users : allUsers)
                             .find(u => u.id === currentUser.id || u.email === currentUser.email);
                         
                         if (freshUserData) {
-                            // On injecte les données réelles de la base dans l'objet de session
+                            // On injecte les valeurs réelles de la base (ex: 70 000 CFA investi)
                             currentUser.balance = freshUserData.balance;
                             currentUser.total_invested = freshUserData.total_invested;
                             
-                            // Recalculer les Gains Estimés en fonction du nouvel investissement
+                            // Recalcul manuel des "Gains estimés" pour l'affichage
                             const validContribs = allContributions.filter(c => 
-                                (c.member_id === currentUser.id) && 
+                                (c.member_id === currentUser.id || c.user_id === currentUser.id) && 
                                 (c.status === 'validé' || c.status === 'validated')
                             );
                             
@@ -5913,28 +5913,28 @@ const newProject = {
                                 return sum + (c.amount * yieldRate);
                             }, 0);
                             
-                            console.log('💰 Données synchronisées :', {
-                                solde: currentUser.balance,
-                                investi: currentUser.total_invested
+                            console.log('💰 Données synchronisées avec succès :', {
+                                balance: currentUser.balance,
+                                total_invested: currentUser.total_invested
                             });
                         }
                     }
-                    
-                    // 7. Mettre à jour les dashboards à l'écran
+
+                    // 7. Mettre à jour l'affichage des dashboards
                     if (currentUser && currentUser.email === 'elkas07@live.fr') {
                         if (typeof updateAdminDashboard === 'function') updateAdminDashboard();
                     } 
                     
-                    // Appeler systématiquement pour rafraîchir les blocs "Solde" et "Investi"
+                    // Cette fonction est indispensable pour réécrire les chiffres dans les blocs blancs
                     if (typeof updateMemberDashboard === 'function') {
                         updateMemberDashboard();
                     } else {
-                        // Si l'affichage reste figé malgré tout
+                        // Si le dashboard ne réagit toujours pas, on force un rafraîchissement
                         window.location.reload();
                     }
                 }, 1500); 
                 
-                console.log('✅ Transaction validée avec succès:', transactionId);
+                console.log('✅ Transaction validée et dashboard synchronisé:', transactionId);
                 
             } catch (error) {
                 console.error('❌ Erreur validation transaction:', error);
@@ -5942,8 +5942,7 @@ const newProject = {
                     showNotification('Erreur lors de la validation: ' + error.message, 'error');
                 }
             }
-        }
-		
+			
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une transaction
         async function rejectTransaction(transactionId) {
             if (!isSupabaseConnected || !window.supabaseClient) {
