@@ -1582,8 +1582,14 @@
         }
 
         @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .filters-header {
@@ -3350,101 +3356,7 @@
             }
         }
 
-        // ⭐⭐ CORRECTION CRITIQUE ⭐⭐ - Charger les données du membre courant
-        async function loadMemberData() {
-            if (!currentUser || !isSupabaseConnected || !window.supabaseClient) {
-                console.log('👤 Mode hors ligne - Impossible de charger les données du membre');
-                return null;
-            }
-
-            try {
-                console.log('🔄 Chargement des données du membre courant:', currentUser.email);
-                
-                const { data, error } = await window.supabaseClient
-                    .from('members')
-                    .select('*')
-                    .eq('email', currentUser.email)
-                    .maybeSingle();
-                
-                if (error) {
-                    console.error('❌ Erreur chargement données membre:', error);
-                    return null;
-                }
-                
-                if (data) {
-                    console.log('✅ Données membre chargées:', data);
-                    return data;
-                }
-                
-                return null;
-                
-            } catch (error) {
-                console.error('❌ Erreur chargement données membre:', error);
-                return null;
-            }
-        }
-
-        // ⭐⭐ CORRECTION AMÉLIORÉE ⭐⭐ - Mise à jour du dashboard membre
-        async function updateMemberDashboard() {
-            if (!currentUser) return;
-            
-            console.log('🔄 Mise à jour du dashboard membre...');
-            
-            try {
-                // Charger les données fraîches du membre
-                const memberData = await loadMemberData();
-                
-                if (memberData) {
-                    console.log('💰 Solde actuel du membre:', memberData.balance);
-                    console.log('💰 Total investi du membre:', memberData.total_invested);
-                    
-                    // Mettre à jour le solde
-                    document.getElementById('memberBalance').textContent = formatCFA(memberData.balance || 0);
-                    document.getElementById('availableBalance').textContent = formatCFA(memberData.balance || 0);
-                    document.getElementById('totalInvested').textContent = formatCFA(memberData.total_invested || 0);
-                    
-                    // Mettre à jour le message de bienvenue
-                    const welcomeMessage = document.getElementById('memberWelcomeMessage');
-                    if (welcomeMessage) {
-                        welcomeMessage.textContent = `Bonjour ${memberData.name || currentUser.email.split('@')[0]}, bienvenue dans votre espace investisseur`;
-                    }
-                }
-                
-                // Calculer les gains estimés
-                const memberInvestments = contributions.filter(c => {
-                    const member = users.find(u => u.email === currentUser.email);
-                    return member && c.member_id === member.id;
-                });
-                
-                let totalExpectedReturn = 0;
-                let activeProjectsCount = 0;
-                
-                memberInvestments.forEach(investment => {
-                    const project = projects.find(p => p.id === investment.project_id);
-                    if (project && project.status === 'active') {
-                        activeProjectsCount++;
-                        const annualReturn = investment.amount * (project.return_rate / 100);
-                        totalExpectedReturn += annualReturn;
-                    }
-                });
-                
-                document.getElementById('expectedReturn').textContent = formatCFA(totalExpectedReturn);
-                document.getElementById('activeProjects').textContent = activeProjectsCount;
-                
-                // Mettre à jour la liste des investissements
-                updateMemberInvestmentsList();
-                
-                // Mettre à jour les transactions en attente
-                updateMemberPendingTransactions();
-                
-                console.log('✅ Dashboard membre mis à jour avec succès');
-                
-            } catch (error) {
-                console.error('❌ Erreur mise à jour dashboard membre:', error);
-            }
-        }
-
-        // ⭐⭐ CORRECTION ⭐⭐ - Initialisation de Supabase
+        // ⭐ CORRECTION AMÉLIORÉE ⭐ - Initialisation de Supabase
         async function initializeSupabase() {
             try {
                 console.log('🧪 Initialisation Supabase...');
@@ -5621,7 +5533,7 @@
             }
         }
 
-        // ⭐⭐ CORRECTION CRITIQUE ⭐⭐ - Fonction validateTransaction
+        // ⭐⭐ CORRECTION CRITIQUE AMÉLIORÉE ⭐⭐ - Fonction validateTransaction
         async function validateTransaction(transactionId) {
             if (!isSupabaseConnected || !window.supabaseClient) {
                 showNotification('Mode hors ligne - Impossible de valider les transactions', 'warning');
@@ -5657,9 +5569,6 @@
                     return;
                 }
 
-                console.log('💰 Solde actuel du membre:', member.balance);
-                console.log('💰 Montant de la transaction:', transaction.amount);
-
                 // 3. Traiter selon le type de transaction
                 if (transaction.type === 'deposit') {
                     // Mise à jour du solde du membre
@@ -5674,7 +5583,6 @@
                         throw updateError;
                     }
 
-                    console.log('💰 Nouveau solde après dépôt:', newBalance);
                     showNotification(`Dépôt de ${formatCFA(transaction.amount)} validé ! Solde mis à jour.`);
 
                 } else if (transaction.type === 'investment') {
@@ -5686,20 +5594,15 @@
 
                     // Mettre à jour le solde et total investi du membre
                     const newBalance = member.balance - transaction.amount;
-                    const newTotalInvested = (member.total_invested || 0) + transaction.amount;
-                    
                     const { error: updateBalanceError } = await window.supabaseClient
                         .from('members')
                         .update({ 
                             balance: newBalance,
-                            total_invested: newTotalInvested
+                            total_invested: (member.total_invested || 0) + transaction.amount
                         })
                         .eq('id', member.id);
 
                     if (updateBalanceError) throw updateBalanceError;
-
-                    console.log('💰 Nouveau solde après investissement:', newBalance);
-                    console.log('💰 Nouveau total investi:', newTotalInvested);
 
                     // Mettre à jour le projet
                     const project = projects.find(p => p.id == transaction.project_id);
@@ -5740,7 +5643,7 @@
                 }
 
                 // 4. Mettre à jour le statut de la transaction
-               const { error: updateStatusError } = await window.supabaseClient
+                const { error: updateStatusError } = await window.supabaseClient
                     .from('transactions')
                     .update({ 
                         status: 'validated',
@@ -5753,35 +5656,168 @@
                 // 5. Retirer la ligne du tableau
                 removeTransactionRow(transactionId);
 
-               // 6. Attendre un court instant puis mettre à jour les données
-               setTimeout(async () => {
-                    await loadPendingTransactions();
-                    await loadProjects();
-                    await loadContributions();
-                    await loadUsers();
-                    
-                    // ⭐ CORRECTION CRITIQUE : Recharger les données du membre
-                    if (currentUser && currentUser.email === member.email) {
-                        await updateMemberDashboard();
-                    }
-                    
-                    // 7. Mettre à jour les dashboards
-                    if (currentUser && currentUser.email === 'elkas07@live.fr') {
-                        updateAdminDashboard();
-                    } else if (currentUser) {
-                        // Cette fonction va maintenant dessiner le dashboard avec le solde à jour
-                        updateMemberDashboard();
-                    }
-                    
-                    console.log('✅ Mise à jour complète effectuée après validation');
-                    
-                }, 1000);
+                // 6. ⭐⭐ CORRECTION CRITIQUE ⭐⭐ - Charger les données fraîches et forcer la mise à jour
+                await loadPendingTransactions();
+                await loadProjects();
+                await loadContributions();
+                await loadUsers();
+                
+                // ⭐⭐ CORRECTION SPÉCIFIQUE ⭐⭐ - Charger les données du membre actuel
+                if (currentUser && currentUser.email !== 'elkas07@live.fr') {
+                    // Recharger les données spécifiques au membre
+                    await loadMemberData();
+                }
+                
+                // 7. Mettre à jour les dashboards
+                if (currentUser && currentUser.email === 'elkas07@live.fr') {
+                    updateAdminDashboard();
+                } else if (currentUser) {
+                    // ⭐⭐ CORRECTION SPÉCIFIQUE ⭐⭐ - Forcer la mise à jour du dashboard membre
+                    updateMemberDashboard(true); // Passer true pour forcer le rechargement
+                }
                 
                 console.log('✅ Transaction validée avec succès:', transactionId);
                 
             } catch (error) {
                 console.error('❌ Erreur validation transaction:', error);
                 showNotification('Erreur lors de la validation: ' + error.message, 'error');
+            }
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Charger les données du membre
+        async function loadMemberData() {
+            if (!currentUser || !isSupabaseConnected || !window.supabaseClient) {
+                return;
+            }
+
+            try {
+                // Récupérer les données fraîches du membre
+                const { data: memberData, error } = await window.supabaseClient
+                    .from('members')
+                    .select('*')
+                    .eq('email', currentUser.email)
+                    .single();
+
+                if (!error && memberData) {
+                    // Mettre à jour les variables locales
+                    const memberIndex = users.findIndex(u => u.email === currentUser.email);
+                    if (memberIndex !== -1) {
+                        users[memberIndex] = memberData;
+                    }
+                    
+                    // Mettre à jour l'affichage
+                    updateMemberDashboard(true);
+                }
+            } catch (error) {
+                console.error('❌ Erreur chargement données membre:', error);
+            }
+        }
+
+        // ⭐⭐ CORRECTION AMÉLIORÉE ⭐⭐ - Mise à jour du dashboard membre
+        function updateMemberDashboard(forceRefresh = false) {
+            if (!currentUser) return;
+
+            const member = users.find(u => u.email === currentUser.email);
+            if (!member) return;
+
+            // Mettre à jour les éléments d'affichage
+            const memberBalance = document.getElementById('memberBalance');
+            const availableBalance = document.getElementById('availableBalance');
+            const totalInvested = document.getElementById('totalInvested');
+            const memberWelcomeMessage = document.getElementById('memberWelcomeMessage');
+            
+            if (memberBalance) memberBalance.textContent = formatCFA(member.balance || 0);
+            if (availableBalance) availableBalance.textContent = formatCFA(member.balance || 0);
+            if (totalInvested) totalInvested.textContent = formatCFA(member.total_invested || 0);
+            if (memberWelcomeMessage) memberWelcomeMessage.textContent = `Bonjour ${member.name || currentUser.email}, bienvenue dans votre espace investisseur`;
+            
+            // Calculer les gains estimés
+            const expectedReturn = document.getElementById('expectedReturn');
+            if (expectedReturn) {
+                // Calcul basé sur un rendement moyen de 12%
+                const estimatedGains = (member.total_invested || 0) * 0.12;
+                expectedReturn.textContent = formatCFA(estimatedGains);
+            }
+            
+            // Calculer les projets actifs
+            const activeProjects = document.getElementById('activeProjects');
+            if (activeProjects) {
+                // Compter les projets actifs où le membre a investi
+                const memberContributions = contributions.filter(c => c.member_id === member.id);
+                const activeProjectIds = [...new Set(memberContributions.map(c => c.project_id))];
+                activeProjects.textContent = activeProjectIds.length;
+            }
+            
+            // ⭐⭐ CORRECTION SPÉCIFIQUE ⭐⭐ - Forcer le rechargement des investissements
+            if (forceRefresh) {
+                loadUserInvestments(member.id);
+                loadUserPendingTransactions(member.id);
+            }
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Charger les investissements du membre
+        async function loadUserInvestments(memberId) {
+            if (!isSupabaseConnected || !window.supabaseClient) return;
+
+            try {
+                const { data, error } = await window.supabaseClient
+                    .from('contributions')
+                    .select('*, projects(name)')
+                    .eq('member_id', memberId)
+                    .order('created_at', { ascending: false });
+
+                if (!error && data) {
+                    const investmentsBody = document.getElementById('memberInvestments');
+                    if (investmentsBody) {
+                        investmentsBody.innerHTML = data.map(investment => `
+                            <tr>
+                                <td>${investment.projects?.name || 'Projet'}</td>
+                                <td>${formatCFA(investment.amount)}</td>
+                                <td>${new Date(investment.created_at).toLocaleDateString()}</td>
+                                <td>${investment.payment_method === 'cash' ? 'Espèces' : 
+                                     investment.payment_method === 'transfer' ? 'Virement' : 
+                                     investment.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}</td>
+                                <td><span class="status-badge status-active">Validé</span></td>
+                                <td>${formatCFA(investment.amount * 0.12)}</td>
+                            </tr>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Erreur chargement investissements:', error);
+            }
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Charger les transactions en attente du membre
+        async function loadUserPendingTransactions(memberId) {
+            if (!isSupabaseConnected || !window.supabaseClient) return;
+
+            try {
+                const { data, error } = await window.supabaseClient
+                    .from('transactions')
+                    .select('*')
+                    .eq('member_id', memberId)
+                    .eq('status', 'pending')
+                    .order('created_at', { ascending: false });
+
+                if (!error && data) {
+                    const pendingBody = document.getElementById('memberPendingTransactions');
+                    if (pendingBody) {
+                        pendingBody.innerHTML = data.map(transaction => `
+                            <tr>
+                                <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
+                                <td>${formatCFA(transaction.amount)}</td>
+                                <td>${transaction.payment_method === 'cash' ? 'Espèces' : 
+                                     transaction.payment_method === 'transfer' ? 'Virement' : 
+                                     transaction.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}</td>
+                                <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+                                <td><span class="status-badge status-pending">En attente</span></td>
+                            </tr>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Erreur chargement transactions en attente:', error);
             }
         }
 
@@ -6158,6 +6194,7 @@
 
                 showNotification('Projet supprimé avec succès');
                 await loadProjects();
+                updateProjectsDisplay();
                 updateAdminProjectsList();
 
             } catch (error) {
@@ -6166,9 +6203,9 @@
             }
         }
 
-        // Setup des écouteurs d'événements
+        // Autres fonctions (setupEventListeners, setupMobileMenu, etc.)
         function setupEventListeners() {
-            // Connexion
+            // Login form
             document.getElementById('loginForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 const email = document.getElementById('login-email').value;
@@ -6176,7 +6213,7 @@
                 login(email, password);
             });
 
-            // Inscription
+            // Registration form
             document.getElementById('registrationForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 const name = document.getElementById('reg-name').value;
@@ -6193,111 +6230,211 @@
                 register(name, email, password, phone);
             });
 
-            // Mot de passe oublié
+            // Forgot password form
             document.getElementById('forgotPasswordForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 processForgotPassword();
             });
 
-            // Ajout de fonds
+            // Add funds form
             document.getElementById('addFundsForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 processAddFunds();
             });
 
-            // Montant des fonds
-            document.getElementById('fundsAmount').addEventListener('input', updateFundsAmountDisplay);
+            // Investment amount display
+            const investmentAmount = document.getElementById('investmentAmount');
+            if (investmentAmount) {
+                investmentAmount.addEventListener('input', updateAmountDisplay);
+            }
 
-            // Montant de l'investissement
-            document.getElementById('investmentAmount').addEventListener('input', updateAmountDisplay);
+            // Funds amount display
+            const fundsAmount = document.getElementById('fundsAmount');
+            if (fundsAmount) {
+                fundsAmount.addEventListener('input', updateFundsAmountDisplay);
+            }
 
-            // Simulateur
-            setupSimulator();
-
-            // Ajout de projet
-            document.getElementById('addProjectForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                addProject();
+            // Payment method selection
+            document.querySelectorAll('input[name="paymentMethod"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    document.querySelectorAll('.payment-method').forEach(method => {
+                        method.classList.remove('selected');
+                    });
+                    this.parentElement.classList.add('selected');
+                });
             });
 
-            // Modification de projet
-            document.getElementById('editProjectForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                updateProject();
-            });
-
-            // Paramètres de commission
-            document.getElementById('commissionSettingsForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                saveCommissionSettings();
-            });
-
-            // Modification de commission de projet
-            document.getElementById('editProjectCommissionForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                updateProjectCommission();
-            });
-
-            // Modification d'utilisateur
-            document.getElementById('editUserForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                editUser(currentViewingUserId);
+            // Funds payment method selection
+            document.querySelectorAll('input[name="fundsPaymentMethod"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    document.querySelectorAll('.payment-method').forEach(method => {
+                        method.classList.remove('selected');
+                    });
+                    this.parentElement.classList.add('selected');
+                });
             });
 
             // Setup image upload
             setupImageUpload();
+
+            // Setup simulator
+            setupSimulator();
+
+            // Edit project form
+            const editProjectForm = document.getElementById('editProjectForm');
+            if (editProjectForm) {
+                editProjectForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    updateProject();
+                });
+            }
+
+            // Commission settings form
+            const commissionSettingsForm = document.getElementById('commissionSettingsForm');
+            if (commissionSettingsForm) {
+                commissionSettingsForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    saveCommissionSettings();
+                });
+            }
+
+            // Edit project commission form
+            const editProjectCommissionForm = document.getElementById('editProjectCommissionForm');
+            if (editProjectCommissionForm) {
+                editProjectCommissionForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    updateProjectCommission();
+                });
+                
+                const commissionRateInput = document.getElementById('edit-project-commission-rate');
+                if (commissionRateInput) {
+                    commissionRateInput.addEventListener('input', function() {
+                        const projectId = this.getAttribute('data-project-id');
+                        const project = projects.find(p => p.id == projectId);
+                        if (project) {
+                            updateCommissionPreview(project.collected, parseFloat(this.value));
+                        }
+                    });
+                }
+            }
+
+            // Edit user form
+            const editUserForm = document.getElementById('editUserForm');
+            if (editUserForm) {
+                editUserForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    editUser(currentViewingUserId);
+                });
+            }
+
+            // User search
+            const userSearch = document.getElementById('userSearch');
+            if (userSearch) {
+                userSearch.addEventListener('input', function(e) {
+                    userSearchTerm = e.target.value;
+                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter);
+                });
+            }
+
+            // User role filter
+            const userRoleFilterEl = document.getElementById('userRoleFilter');
+            if (userRoleFilterEl) {
+                userRoleFilterEl.addEventListener('change', function(e) {
+                    userRoleFilter = e.target.value;
+                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter);
+                });
+            }
+
+            // User status filter
+            const userStatusFilterEl = document.getElementById('userStatusFilter');
+            if (userStatusFilterEl) {
+                userStatusFilterEl.addEventListener('change', function(e) {
+                    userStatusFilter = e.target.value;
+                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter);
+                });
+            }
+
+            // User KYC status filter
+            const userKYCStatusFilterEl = document.getElementById('userKYCStatusFilter');
+            if (userKYCStatusFilterEl) {
+                userKYCStatusFilterEl.addEventListener('change', function(e) {
+                    userKYCStatusFilter = e.target.value;
+                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+                });
+            }
+
+            // User page size
+            const userPageSizeEl = document.getElementById('userPageSize');
+            if (userPageSizeEl) {
+                userPageSizeEl.addEventListener('change', function(e) {
+                    userPageSize = parseInt(e.target.value);
+                    currentUserPage = 1;
+                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter);
+                });
+            }
+
+            // Export period
+            const exportPeriod = document.getElementById('exportPeriod');
+            if (exportPeriod) {
+                exportPeriod.addEventListener('change', function(e) {
+                    const customPeriodContainer = document.getElementById('customPeriodContainer');
+                    if (e.target.value === 'custom') {
+                        customPeriodContainer.style.display = 'block';
+                    } else {
+                        customPeriodContainer.style.display = 'none';
+                    }
+                });
+            }
         }
 
-        // Setup du menu mobile
         function setupMobileMenu() {
             const mobileMenuBtn = document.getElementById('mobileMenuBtn');
             const navLinks = document.getElementById('navLinks');
             const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
-            
-            mobileMenuBtn.addEventListener('click', function() {
-                navLinks.classList.toggle('active');
-                mobileMenuOverlay.classList.toggle('active');
-                mobileMenuBtn.classList.toggle('active');
-                mobileMenuBtn.setAttribute('aria-expanded', navLinks.classList.contains('active'));
-            });
-            
-            mobileMenuOverlay.addEventListener('click', function() {
-                navLinks.classList.remove('active');
-                mobileMenuOverlay.classList.remove('active');
-                mobileMenuBtn.classList.remove('active');
-                mobileMenuBtn.setAttribute('aria-expanded', false);
-            });
-            
-            // Fermer le menu au clic sur un lien
-            const navItems = navLinks.querySelectorAll('a');
-            navItems.forEach(item => {
-                item.addEventListener('click', function() {
-                    navLinks.classList.remove('active');
-                    mobileMenuOverlay.classList.remove('active');
-                    mobileMenuBtn.classList.remove('active');
-                    mobileMenuBtn.setAttribute('aria-expanded', false);
+
+            if (mobileMenuBtn && navLinks) {
+                mobileMenuBtn.addEventListener('click', function() {
+                    navLinks.classList.toggle('active');
+                    mobileMenuBtn.classList.toggle('active');
+                    mobileMenuOverlay.classList.toggle('active');
+                    document.body.style.overflow = navLinks.classList.contains('active') ? 'hidden' : '';
                 });
-            });
+            }
+
+            if (mobileMenuOverlay) {
+                mobileMenuOverlay.addEventListener('click', function() {
+                    navLinks.classList.remove('active');
+                    mobileMenuBtn.classList.remove('active');
+                    mobileMenuOverlay.classList.remove('active');
+                    document.body.style.overflow = '';
+                });
+            }
         }
 
         function closeMobileMenu() {
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
             const navLinks = document.getElementById('navLinks');
             const mobileMenuOverlay = document.getElementById('mobileMenuOverlay');
-            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-            
-            navLinks.classList.remove('active');
-            mobileMenuOverlay.classList.remove('active');
-            mobileMenuBtn.classList.remove('active');
-            mobileMenuBtn.setAttribute('aria-expanded', false);
+
+            if (navLinks && mobileMenuBtn && mobileMenuOverlay) {
+                navLinks.classList.remove('active');
+                mobileMenuBtn.classList.remove('active');
+                mobileMenuOverlay.classList.remove('active');
+                document.body.style.overflow = '';
+            }
         }
 
-        // Affichage des notifications
         function showNotification(message, type = 'success') {
             const notification = document.getElementById('notification');
-            const messageEl = document.getElementById('notification-message');
+            const messageElement = document.getElementById('notification-message');
             const icon = notification.querySelector('i');
             
-            messageEl.textContent = message;
+            if (!notification || !messageElement) return;
+            
+            // Mettre à jour le message et le type
+            messageElement.textContent = message;
+            notification.className = 'notification';
+            notification.classList.add(type);
             
             // Changer l'icône selon le type
             if (type === 'error') {
@@ -6306,12 +6443,6 @@
                 icon.className = 'fas fa-exclamation-triangle';
             } else {
                 icon.className = 'fas fa-check-circle';
-            }
-            
-            // Appliquer la classe de type
-            notification.className = 'notification';
-            if (type !== 'success') {
-                notification.classList.add(type);
             }
             
             // Afficher la notification
@@ -6323,384 +6454,421 @@
             }, 5000);
         }
 
-        // Rafraîchir le dashboard admin
-        async function refreshAdminDashboard() {
-            console.log('🔄 Rafraîchissement du dashboard admin...');
-            showNotification('Rafraîchissement en cours...');
-            
-            await loadUsers();
-            await loadProjects();
-            await loadContributions();
-            await loadCommissions();
-            await loadPendingTransactions();
-            await loadKYCVerifications();
-            
-            updateAdminDashboard();
-            showNotification('Dashboard admin rafraîchi avec succès');
-        }
-
-        // Rafraîchir le dashboard membre
-        async function refreshMemberDashboard() {
-            console.log('🔄 Rafraîchissement du dashboard membre...');
-            showNotification('Rafraîchissement en cours...');
-            
-            await loadProjects();
-            await loadContributions();
-            await loadPendingTransactions();
-            await loadUserKYCStatus();
-            
-            updateMemberDashboard();
-            showNotification('Dashboard membre rafraîchi avec succès');
-        }
-
-        // Mettre à jour la liste des investissements du membre
-        function updateMemberInvestmentsList() {
-            const tbody = document.getElementById('memberInvestments');
-            if (!tbody || !currentUser) return;
-            
-            const member = users.find(u => u.email === currentUser.email);
-            if (!member) return;
-            
-            const memberContributions = contributions.filter(c => c.member_id === member.id);
-            
-            tbody.innerHTML = '';
-            
-            if (memberContributions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucun investissement pour le moment</td></tr>';
+        function refreshMemberDashboard() {
+            if (!currentUser) {
+                showNotification('Veuillez vous connecter', 'error');
                 return;
             }
             
-            memberContributions.forEach(contribution => {
-                const project = projects.find(p => p.id === contribution.project_id);
-                const expectedReturn = project ? contribution.amount * (project.return_rate / 100) : 0;
+            showNotification('Dashboard actualisé');
+            
+            // Recharger toutes les données
+            loadProjects();
+            loadContributions();
+            loadPendingTransactions();
+            loadUserKYCStatus();
+            
+            // Trouver le membre actuel
+            const member = users.find(u => u.email === currentUser.email);
+            if (member) {
+                // Recharger les données spécifiques au membre
+                loadUserInvestments(member.id);
+                loadUserPendingTransactions(member.id);
                 
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${project ? project.name : 'Projet inconnu'}</td>
-                    <td>${formatCFA(contribution.amount)}</td>
-                    <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
-                    <td>${contribution.payment_method || 'N/A'}</td>
-                    <td><span class="status-badge ${contribution.status === 'completed' ? 'status-active' : 'status-pending'}">${contribution.status === 'completed' ? 'Terminé' : 'En attente'}</span></td>
-                    <td>${formatCFA(expectedReturn)}</td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-
-        // Mettre à jour les transactions en attente du membre
-        function updateMemberPendingTransactions() {
-            const tbody = document.getElementById('memberPendingTransactions');
-            if (!tbody || !currentUser) return;
-            
-            const member = users.find(u => u.email === currentUser.email);
-            if (!member) return;
-            
-            const memberPending = pendingTransactions.filter(t => t.member_id === member.id);
-            
-            tbody.innerHTML = '';
-            
-            if (memberPending.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Aucune transaction en attente</td></tr>';
-                return;
+                // Forcer la mise à jour de l'affichage
+                updateMemberDashboard(true);
             }
-            
-            memberPending.forEach(transaction => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
-                    <td>${formatCFA(transaction.amount)}</td>
-                    <td>${transaction.payment_method || 'N/A'}</td>
-                    <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
-                    <td><span class="status-badge status-pending">En attente</span></td>
-                `;
-                tbody.appendChild(row);
-            });
         }
 
-        // Mettre à jour le dashboard admin
-        async function updateAdminDashboard() {
-            console.log('🔄 Mise à jour du dashboard admin...');
+        function refreshAdminDashboard() {
+            showNotification('Dashboard admin actualisé');
             
+            // Recharger toutes les données
+            loadProjects();
+            loadUsers();
+            loadContributions();
+            loadPendingTransactions();
+            loadKYCVerifications();
+            loadCommissions();
+            
+            // Mettre à jour l'affichage
+            updateAdminDashboard();
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour le dashboard admin
+        function updateAdminDashboard() {
             // Mettre à jour les statistiques
-            document.getElementById('adminTotalUsers').textContent = totalUserCount;
-            document.getElementById('adminTotalProjects').textContent = projects.length;
+            const adminTotalUsers = document.getElementById('adminTotalUsers');
+            const adminTotalProjects = document.getElementById('adminTotalProjects');
+            const adminTotalInvestments = document.getElementById('adminTotalInvestments');
+            const adminPendingPayments = document.getElementById('adminPendingPayments');
+            const adminPendingKYC = document.getElementById('adminPendingKYC');
+            
+            if (adminTotalUsers) adminTotalUsers.textContent = users.length;
+            if (adminTotalProjects) adminTotalProjects.textContent = projects.length;
             
             // Calculer le total des investissements
-            const totalInvestments = contributions.reduce((sum, c) => sum + c.amount, 0);
-            document.getElementById('adminTotalInvestments').textContent = formatCFA(totalInvestments);
+            let totalInvestments = 0;
+            contributions.forEach(c => {
+                if (c.status === 'completed') {
+                    totalInvestments += c.amount;
+                }
+            });
+            if (adminTotalInvestments) adminTotalInvestments.textContent = formatCFA(totalInvestments);
             
-            // Compter les transactions en attente
-            document.getElementById('adminPendingPayments').textContent = pendingTransactions.length;
+            if (adminPendingPayments) adminPendingPayments.textContent = pendingTransactions.length;
             
-            // Compter les KYC en attente
+            // Calculer les KYC en attente
             const pendingKYC = kycVerifications.filter(k => k.status === 'pending').length;
-            document.getElementById('adminPendingKYC').textContent = pendingKYC;
+            if (adminPendingKYC) adminPendingKYC.textContent = pendingKYC;
             
-            // Mettre à jour les alertes admin
-            updateAdminAlerts();
-            
-            // Mettre à jour les listes
+            // Mettre à jour les tableaux
             updateAdminProjectsList();
             updateAdminUsersList();
+            updateAdminCommissionsList();
             updateAdminPendingTransactions();
             updateAdminInvestmentsList();
-            updateAdminCommissionsList();
             
             // Mettre à jour les graphiques
             updateCharts();
-            
-            console.log('✅ Dashboard admin mis à jour');
         }
 
-        // Mettre à jour les alertes admin
-        function updateAdminAlerts() {
-            const alertsContainer = document.getElementById('alertsContent');
-            const alertsPanel = document.getElementById('adminAlerts');
-            
-            if (!alertsContainer) return;
-            
-            let alerts = [];
-            
-            // Transactions en attente
-            if (pendingTransactions.length > 0) {
-                alerts.push(`${pendingTransactions.length} transaction(s) en attente de validation`);
-            }
-            
-            // KYC en attente
-            const pendingKYC = kycVerifications.filter(k => k.status === 'pending').length;
-            if (pendingKYC > 0) {
-                alerts.push(`${pendingKYC} vérification(s) KYC en attente`);
-            }
-            
-            // Projets presque financés
-            const nearlyFundedProjects = projects.filter(p => 
-                p.status === 'active' && 
-                p.collected >= p.target * 0.9 && 
-                p.collected < p.target
-            ).length;
-            
-            if (nearlyFundedProjects > 0) {
-                alerts.push(`${nearlyFundedProjects} projet(s) presque financés`);
-            }
-            
-            // Afficher/masquer le panneau d'alertes
-            if (alerts.length > 0) {
-                alertsPanel.style.display = 'block';
-                alertsContainer.innerHTML = alerts.map(alert => `<p>• ${alert}</p>`).join('');
-            } else {
-                alertsPanel.style.display = 'none';
-            }
-        }
-
-        // Mettre à jour la liste des projets admin
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour la liste des projets admin
         function updateAdminProjectsList() {
-            const tbody = document.getElementById('adminProjectsList');
-            if (!tbody) return;
+            const tableBody = document.getElementById('adminProjectsList');
+            if (!tableBody) return;
             
-            tbody.innerHTML = '';
-            
-            projects.forEach(project => {
+            tableBody.innerHTML = projects.map(project => {
                 const progress = (project.collected / project.target) * 100;
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${project.name}</td>
-                    <td>${formatCFA(project.target)}</td>
-                    <td>${formatCFA(project.collected)}</td>
-                    <td>
-                        <div style="width: 100%; background-color: #e2e8f0; border-radius: 4px; height: 8px;">
-                            <div style="width: ${Math.min(progress, 100)}%; background-color: var(--accent-color); height: 100%; border-radius: 4px;"></div>
-                        </div>
-                        <div style="font-size: 0.85rem; margin-top: 4px;">${Math.floor(progress)}%</div>
-                    </td>
-                    <td>
-                        <span class="status-badge ${project.status === 'active' ? 'status-active' : project.status === 'completed' ? 'status-completed' : 'status-pending'}">
-                            ${project.status === 'active' ? 'Actif' : project.status === 'completed' ? 'Terminé' : 'En attente'}
-                        </span>
-                    </td>
-                    <td>
-                        <div class="admin-actions">
-                            <button class="admin-btn btn-edit" onclick="openEditProjectModal('${project.id}')">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="admin-btn btn-delete" onclick="deleteProject('${project.id}')">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                            <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${project.id}')">
-                                <i class="fas fa-percentage"></i>
-                            </button>
-                        </div>
-                    </td>
+                const statusText = project.status === 'active' ? 'Actif' : 
+                                 project.status === 'completed' ? 'Terminé' : 'En attente';
+                const statusClass = project.status === 'active' ? 'status-active' : 
+                                  project.status === 'completed' ? 'status-completed' : 'status-pending';
+                
+                return `
+                    <tr>
+                        <td>${project.name}</td>
+                        <td>${formatCFA(project.target)}</td>
+                        <td>${formatCFA(project.collected)}</td>
+                        <td>
+                            <div class="progress-bar" style="margin: 5px 0;">
+                                <div class="progress" style="width: ${Math.min(progress, 100)}%"></div>
+                            </div>
+                            <div>${Math.floor(progress)}%</div>
+                        </td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td>
+                            <div class="admin-actions">
+                                <button class="admin-btn btn-edit" onclick="openEditProjectModal('${project.id}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="admin-btn btn-delete" onclick="deleteProject('${project.id}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${project.id}')">
+                                    <i class="fas fa-percent"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
                 `;
-                tbody.appendChild(row);
-            });
+            }).join('');
         }
 
-        // Mettre à jour la liste des utilisateurs admin
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour la liste des commissions admin
+        function updateAdminCommissionsList() {
+            const tableBody = document.getElementById('adminCommissionsList');
+            if (!tableBody) return;
+            
+            if (commissions.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucune commission enregistrée</td></tr>';
+                return;
+            }
+            
+            tableBody.innerHTML = commissions.map(commission => {
+                const project = projects.find(p => p.id == commission.project_id);
+                const projectName = project ? project.name : 'Projet inconnu';
+                const collectedAmount = project ? project.collected : 0;
+                const commissionAmount = collectedAmount * (commission.commission_rate / 100);
+                const statusText = commission.status === 'paid' ? 'Payé' : 'En attente';
+                const statusClass = commission.status === 'paid' ? 'status-active' : 'status-pending';
+                
+                return `
+                    <tr>
+                        <td>${projectName}</td>
+                        <td>${commission.commission_rate || commission.rate || 0}%</td>
+                        <td>${formatCFA(commissionAmount)}</td>
+                        <td>${formatCFA(collectedAmount)}</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td>
+                            <div class="admin-actions">
+                                <button class="admin-btn btn-edit" onclick="openEditProjectCommissionModal('${commission.project_id}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour la liste des utilisateurs admin
         function updateAdminUsersList() {
-            const tbody = document.getElementById('adminUsersList');
-            if (!tbody) return;
+            const tableBody = document.getElementById('adminUsersList');
+            if (!tableBody) return;
             
-            tbody.innerHTML = '';
-            
-            users.forEach(user => {
+            tableBody.innerHTML = users.map(user => {
+                // Trouver le statut KYC
                 const kycDoc = kycVerifications.find(k => k.user_id === user.id);
                 const kycStatus = kycDoc ? kycDoc.status : 'not_submitted';
                 const kycStatusText = getKYCStatusText(kycStatus);
+                const kycStatusClass = `kyc-${kycStatus.replace('_', '-')}`;
                 
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${user.name || 'Non renseigné'}</td>
-                    <td>${user.email}</td>
-                    <td>${user.phone || 'Non renseigné'}</td>
-                    <td>
-                        <span class="status-badge ${user.role === 'admin' ? 'status-active' : 'status-pending'}">
-                            ${user.role === 'admin' ? 'Admin' : 'Investisseur'}
-                        </span>
-                    </td>
-                    <td>
-                        <span class="kyc-status kyc-${kycStatus.replace('_', '-')}">
-                            ${kycStatusText}
-                        </span>
-                    </td>
-                    <td>${formatCFA(user.total_invested || 0)}</td>
-                    <td>${formatCFA(user.balance || 0)}</td>
-                    <td>${new Date(user.created_at).toLocaleDateString()}</td>
-                    <td>
-                        <div class="admin-actions">
-                            <button class="admin-btn btn-edit" onclick="openUserDetailsModal('${user.id}')">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                            <button class="admin-btn btn-edit" onclick="openEditUserModal('${user.id}')">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="admin-btn btn-suspend" onclick="suspendUser('${user.id}')">
-                                <i class="fas fa-pause"></i>
-                            </button>
-                        </div>
-                    </td>
+                return `
+                    <tr>
+                        <td>${user.name || 'Non renseigné'}</td>
+                        <td>${user.email}</td>
+                        <td>${user.phone || 'Non renseigné'}</td>
+                        <td>
+                            <span class="status-badge ${user.role === 'admin' ? 'status-active' : 'status-pending'}">
+                                ${user.role === 'admin' ? 'Admin' : 'Investisseur'}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="kyc-status ${kycStatusClass}">${kycStatusText}</span>
+                        </td>
+                        <td>${formatCFA(user.total_invested || 0)}</td>
+                        <td>${formatCFA(user.balance || 0)}</td>
+                        <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <div class="admin-actions">
+                                <button class="admin-btn btn-edit" onclick="openUserDetailsModal('${user.id}')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="admin-btn btn-edit" onclick="openEditUserModal('${user.id}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="admin-btn btn-delete" onclick="deleteUser('${user.id}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <button class="admin-btn ${user.status === 'suspended' ? 'btn-validate' : 'btn-suspend'}" 
+                                        onclick="suspendUser('${user.id}')">
+                                    <i class="fas ${user.status === 'suspended' ? 'fa-play' : 'fa-pause'}"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
                 `;
-                tbody.appendChild(row);
-            });
+            }).join('');
             
             // Mettre à jour la pagination
             updatePagination();
         }
 
-        // Mettre à jour les transactions en attente admin
-        function updateAdminPendingTransactions() {
-            const tbody = document.getElementById('adminPendingTransactions');
-            if (!tbody) return;
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour la pagination
+        function updatePagination() {
+            const totalPages = Math.ceil(totalUserCount / userPageSize);
+            const paginationNumbers = document.getElementById('paginationNumbers');
+            const paginationInfo = document.getElementById('paginationInfo');
             
-            tbody.innerHTML = '';
+            if (!paginationNumbers || !paginationInfo) return;
+            
+            // Mettre à jour les informations
+            const start = (currentUserPage - 1) * userPageSize + 1;
+            const end = Math.min(currentUserPage * userPageSize, totalUserCount);
+            paginationInfo.textContent = `Affichage ${start}-${end} sur ${totalUserCount} utilisateurs`;
+            
+            // Générer les numéros de page
+            let paginationHTML = '';
+            
+            // Bouton précédent
+            paginationHTML += `
+                <button class="pagination-number" ${currentUserPage === 1 ? 'disabled' : ''} 
+                        onclick="changeUserPage(${currentUserPage - 1})">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+            `;
+            
+            // Numéros de page
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentUserPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+            
+            // Ajuster si on est proche de la fin
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHTML += `
+                    <button class="pagination-number ${i === currentUserPage ? 'active' : ''}" 
+                            onclick="changeUserPage(${i})">
+                        ${i}
+                    </button>
+                `;
+            }
+            
+            // Bouton suivant
+            paginationHTML += `
+                <button class="pagination-number" ${currentUserPage === totalPages ? 'disabled' : ''} 
+                        onclick="changeUserPage(${currentUserPage + 1})">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            `;
+            
+            paginationNumbers.innerHTML = paginationHTML;
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Changer de page
+        function changeUserPage(page) {
+            currentUserPage = page;
+            loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour les transactions en attente admin
+        function updateAdminPendingTransactions() {
+            const tableBody = document.getElementById('adminPendingTransactions');
+            if (!tableBody) return;
             
             if (pendingTransactions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucune transaction en attente</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucune transaction en attente</td></tr>';
                 return;
             }
             
-            pendingTransactions.forEach(transaction => {
+            tableBody.innerHTML = pendingTransactions.map(transaction => {
+                // Trouver l'utilisateur
                 const user = users.find(u => u.id === transaction.member_id);
-                const project = projects.find(p => p.id === transaction.project_id);
+                const userName = user ? user.name : 'Utilisateur inconnu';
+                const userEmail = user ? user.email : 'Email inconnu';
                 
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${user ? user.name : 'Utilisateur inconnu'}</td>
-                    <td>${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}</td>
-                    <td>${formatCFA(transaction.amount)}</td>
-                    <td>${transaction.payment_method || 'N/A'}</td>
-                    <td>${project ? project.name : 'N/A'}</td>
-                    <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
-                    <td>
-                        <div class="admin-actions">
-                            <button class="admin-btn btn-validate" onclick="validateTransaction('${transaction.id}')">
-                                <i class="fas fa-check"></i> Valider
-                            </button>
-                            <button class="admin-btn btn-delete" onclick="rejectTransaction('${transaction.id}')">
-                                <i class="fas fa-times"></i> Refuser
-                            </button>
-                        </div>
-                    </td>
+                // Trouver le projet (si c'est un investissement)
+                let projectName = 'N/A';
+                if (transaction.project_id) {
+                    const project = projects.find(p => p.id == transaction.project_id);
+                    projectName = project ? project.name : 'Projet inconnu';
+                }
+                
+                return `
+                    <tr>
+                        <td>
+                            <div>${userName}</div>
+                            <div style="font-size: 0.8rem; color: var(--text-light);">${userEmail}</div>
+                        </td>
+                        <td>
+                            <span class="status-badge ${transaction.type === 'deposit' ? 'status-cash' : 'status-pending'}">
+                                ${transaction.type === 'deposit' ? 'Dépôt' : 'Investissement'}
+                            </span>
+                        </td>
+                        <td>${formatCFA(transaction.amount)}</td>
+                        <td>
+                            ${transaction.payment_method === 'cash' ? 'Espèces' : 
+                              transaction.payment_method === 'transfer' ? 'Virement' : 
+                              transaction.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}
+                        </td>
+                        <td>${projectName}</td>
+                        <td>${new Date(transaction.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <div class="admin-actions">
+                                <button class="admin-btn btn-validate" onclick="validateTransaction('${transaction.id}')">
+                                    <i class="fas fa-check"></i> Valider
+                                </button>
+                                <button class="admin-btn btn-delete" onclick="rejectTransaction('${transaction.id}')">
+                                    <i class="fas fa-times"></i> Refuser
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
                 `;
-                tbody.appendChild(row);
-            });
+            }).join('');
         }
 
-        // Mettre à jour la liste des investissements admin
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour la liste des investissements admin
         function updateAdminInvestmentsList() {
-            const tbody = document.getElementById('adminInvestmentsList');
-            if (!tbody) return;
+            const tableBody = document.getElementById('adminInvestmentsList');
+            if (!tableBody) return;
             
-            // Prendre les 10 dernières contributions
-            const recentContributions = contributions.slice(0, 10);
-            
-            tbody.innerHTML = '';
+            // Prendre les 20 dernières contributions
+            const recentContributions = contributions.slice(0, 20);
             
             if (recentContributions.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucun investissement récent</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Aucun investissement récent</td></tr>';
                 return;
             }
             
-            recentContributions.forEach(contribution => {
+            tableBody.innerHTML = recentContributions.map(contribution => {
+                // Trouver l'utilisateur
                 const user = users.find(u => u.id === contribution.member_id);
-                const project = projects.find(p => p.id === contribution.project_id);
+                const userName = user ? user.name : 'Utilisateur inconnu';
                 
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${user ? user.name : 'Utilisateur inconnu'}</td>
-                    <td>${project ? project.name : 'Projet inconnu'}</td>
-                    <td>${formatCFA(contribution.amount)}</td>
-                    <td>${contribution.payment_method || 'N/A'}</td>
-                    <td><span class="status-badge ${contribution.status === 'completed' ? 'status-active' : 'status-pending'}">${contribution.status === 'completed' ? 'Terminé' : 'En attente'}</span></td>
-                    <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
-                    <td>
-                        <div class="admin-actions">
-                            <button class="admin-btn btn-edit" onclick="alert('Détails de l\'investissement')">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
-                    </td>
+                // Trouver le projet
+                const project = projects.find(p => p.id == contribution.project_id);
+                const projectName = project ? project.name : 'Projet inconnu';
+                
+                return `
+                    <tr>
+                        <td>${userName}</td>
+                        <td>${projectName}</td>
+                        <td>${formatCFA(contribution.amount)}</td>
+                        <td>
+                            ${contribution.payment_method === 'cash' ? 'Espèces' : 
+                              contribution.payment_method === 'transfer' ? 'Virement' : 
+                              contribution.payment_method === 'mobile_money' ? 'Mobile Money' : 'Carte'}
+                        </td>
+                        <td><span class="status-badge status-active">Validé</span></td>
+                        <td>${new Date(contribution.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <div class="admin-actions">
+                                <button class="admin-btn btn-edit" onclick="alert('Détails de l\'investissement')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
                 `;
-                tbody.appendChild(row);
-            });
+            }).join('');
         }
 
-        // Mettre à jour la liste des commissions admin
-        function updateAdminCommissionsList() {
-            displayCommissions(); // Utiliser la fonction existante
-        }
-
-        // Mettre à jour les graphiques
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour les graphiques
         function updateCharts() {
             // Graphique des investissements
-            if (investmentsChart) investmentsChart.destroy();
-            
             const investmentsCtx = document.getElementById('investmentsChart');
-            if (investmentsCtx) {
-                // Données fictives pour l'exemple
-                const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun'];
-                const investmentData = [50000, 75000, 120000, 180000, 220000, 300000];
+            if (investmentsCtx && Chart) {
+                if (investmentsChart) {
+                    investmentsChart.destroy();
+                }
+                
+                // Données exemple pour les investissements
+                const investmentData = {
+                    labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun'],
+                    datasets: [{
+                        label: 'Investissements (CFA)',
+                        data: [500000, 750000, 600000, 900000, 850000, 1100000],
+                        borderColor: 'var(--accent-color)',
+                        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                };
                 
                 investmentsChart = new Chart(investmentsCtx, {
                     type: 'line',
-                    data: {
-                        labels: months,
-                        datasets: [{
-                            label: 'Investissements (CFA)',
-                            data: investmentData,
-                            borderColor: 'var(--accent-color)',
-                            backgroundColor: 'rgba(255, 107, 53, 0.1)',
-                            borderWidth: 2,
-                            tension: 0.4,
-                            fill: true
-                        }]
-                    },
+                    data: investmentData,
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                display: true,
-                                position: 'top'
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return formatCFA(value);
+                                    }
+                                }
                             }
                         }
                     }
@@ -6708,33 +6876,38 @@
             }
             
             // Graphique des projets
-            if (projectsChart) projectsChart.destroy();
-            
             const projectsCtx = document.getElementById('projectsChart');
-            if (projectsCtx) {
-                const activeProjects = projects.filter(p => p.status === 'active').length;
-                const completedProjects = projects.filter(p => p.status === 'completed').length;
-                const pendingProjects = projects.filter(p => p.status === 'pending').length;
+            if (projectsCtx && Chart) {
+                if (projectsChart) {
+                    projectsChart.destroy();
+                }
+                
+                // Compter les projets par statut
+                const activeCount = projects.filter(p => p.status === 'active').length;
+                const completedCount = projects.filter(p => p.status === 'completed').length;
+                const pendingCount = projects.filter(p => p.status === 'pending').length;
+                
+                const projectData = {
+                    labels: ['Actifs', 'Terminés', 'En attente'],
+                    datasets: [{
+                        data: [activeCount, completedCount, pendingCount],
+                        backgroundColor: [
+                            'var(--success-color)',
+                            'var(--accent-color)',
+                            'var(--warning-color)'
+                        ],
+                        borderWidth: 1
+                    }]
+                };
                 
                 projectsChart = new Chart(projectsCtx, {
                     type: 'doughnut',
-                    data: {
-                        labels: ['Actifs', 'Terminés', 'En attente'],
-                        datasets: [{
-                            data: [activeProjects, completedProjects, pendingProjects],
-                            backgroundColor: [
-                                'var(--accent-color)',
-                                'var(--success-color)',
-                                'var(--warning-color)'
-                            ]
-                        }]
-                    },
+                    data: projectData,
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                display: true,
                                 position: 'bottom'
                             }
                         }
@@ -6743,38 +6916,42 @@
             }
             
             // Graphique des utilisateurs
-            if (usersChart) usersChart.destroy();
-            
             const usersCtx = document.getElementById('usersChart');
-            if (usersCtx) {
-                // Données fictives pour l'exemple
-                const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun'];
-                const userData = [10, 25, 45, 70, 100, 150];
+            if (usersCtx && Chart) {
+                if (usersChart) {
+                    usersChart.destroy();
+                }
+                
+                // Données exemple pour la croissance des utilisateurs
+                const userData = {
+                    labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun'],
+                    datasets: [{
+                        label: 'Nouveaux utilisateurs',
+                        data: [10, 15, 12, 18, 22, 25],
+                        borderColor: 'var(--primary-color)',
+                        backgroundColor: 'rgba(13, 27, 42, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                };
                 
                 usersChart = new Chart(usersCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: months,
-                        datasets: [{
-                            label: 'Nouveaux utilisateurs',
-                            data: userData,
-                            backgroundColor: 'var(--primary-color)',
-                            borderColor: 'var(--primary-color)',
-                            borderWidth: 1
-                        }]
-                    },
+                    type: 'line',
+                    data: userData,
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                display: true,
-                                position: 'top'
+                                display: false
                             }
                         },
                         scales: {
                             y: {
-                                beginAtZero: true
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 5
+                                }
                             }
                         }
                     }
@@ -6782,34 +6959,40 @@
             }
             
             // Graphique des méthodes de paiement
-            if (paymentsChart) paymentsChart.destroy();
-            
             const paymentsCtx = document.getElementById('paymentsChart');
-            if (paymentsCtx) {
-                // Données fictives pour l'exemple
-                const methods = ['Espèces', 'Virement', 'Mobile Money', 'Carte'];
-                const methodData = [40, 30, 20, 10];
+            if (paymentsCtx && Chart) {
+                if (paymentsChart) {
+                    paymentsChart.destroy();
+                }
+                
+                // Compter les transactions par méthode de paiement
+                const cashCount = contributions.filter(c => c.payment_method === 'cash').length;
+                const transferCount = contributions.filter(c => c.payment_method === 'transfer').length;
+                const mobileCount = contributions.filter(c => c.payment_method === 'mobile_money').length;
+                const cardCount = contributions.filter(c => c.payment_method === 'card').length;
+                
+                const paymentData = {
+                    labels: ['Espèces', 'Virement', 'Mobile Money', 'Carte'],
+                    datasets: [{
+                        data: [cashCount, transferCount, mobileCount, cardCount],
+                        backgroundColor: [
+                            '#4CAF50',
+                            '#2196F3',
+                            '#FF9800',
+                            '#9C27B0'
+                        ],
+                        borderWidth: 1
+                    }]
+                };
                 
                 paymentsChart = new Chart(paymentsCtx, {
                     type: 'pie',
-                    data: {
-                        labels: methods,
-                        datasets: [{
-                            data: methodData,
-                            backgroundColor: [
-                                '#FF6B35',
-                                '#1B263B',
-                                '#4CAF50',
-                                '#FF9800'
-                            ]
-                        }]
-                    },
+                    data: paymentData,
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                display: true,
                                 position: 'bottom'
                             }
                         }
@@ -6818,80 +7001,240 @@
             }
         }
 
-        // Mettre à jour la pagination
-        function updatePagination() {
-            const paginationInfo = document.getElementById('paginationInfo');
-            const paginationNumbers = document.getElementById('paginationNumbers');
-            
-            if (!paginationInfo || !paginationNumbers) return;
-            
-            // Calculer le nombre total de pages
-            const totalPages = Math.ceil(totalUserCount / userPageSize);
-            
-            // Mettre à jour les informations
-            const start = (currentUserPage - 1) * userPageSize + 1;
-            const end = Math.min(currentUserPage * userPageSize, totalUserCount);
-            paginationInfo.textContent = `Affichage ${start}-${end} sur ${totalUserCount} utilisateurs`;
-            
-            // Générer les numéros de page
-            paginationNumbers.innerHTML = '';
-            
-            // Bouton précédent
-            const prevButton = document.createElement('button');
-            prevButton.className = 'pagination-number';
-            prevButton.innerHTML = '&laquo;';
-            prevButton.disabled = currentUserPage === 1;
-            prevButton.onclick = () => {
-                if (currentUserPage > 1) {
-                    currentUserPage--;
-                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
-                }
-            };
-            paginationNumbers.appendChild(prevButton);
-            
-            // Numéros de page
-            const maxVisiblePages = 5;
-            let startPage = Math.max(1, currentUserPage - Math.floor(maxVisiblePages / 2));
-            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-            
-            if (endPage - startPage + 1 < maxVisiblePages) {
-                startPage = Math.max(1, endPage - maxVisiblePages + 1);
-            }
-            
-            for (let i = startPage; i <= endPage; i++) {
-                const pageButton = document.createElement('button');
-                pageButton.className = 'pagination-number';
-                if (i === currentUserPage) {
-                    pageButton.classList.add('active');
-                }
-                pageButton.textContent = i;
-                pageButton.onclick = () => {
-                    currentUserPage = i;
-                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Sauvegarder les paramètres de commission
+        async function saveCommissionSettings() {
+            try {
+                const defaultRate = parseFloat(document.getElementById('default-commission-rate').value);
+                const calculationMethod = document.getElementById('commission-calculation-method').value;
+                
+                const settings = {
+                    defaultRate: defaultRate,
+                    calculationMethod: calculationMethod
                 };
-                paginationNumbers.appendChild(pageButton);
+                
+                if (isSupabaseConnected && window.supabaseClient) {
+                    const { error } = await window.supabaseClient
+                        .from('platform_settings')
+                        .upsert({
+                            key: 'commission_settings',
+                            value: settings,
+                            updated_at: new Date().toISOString()
+                        });
+                    
+                    if (error) throw error;
+                }
+                
+                commissionSettings = settings;
+                showNotification('Paramètres de commission enregistrés');
+                closeModal('commissionSettingsModal');
+                
+            } catch (error) {
+                console.error('❌ Erreur sauvegarde paramètres:', error);
+                showNotification('Erreur lors de la sauvegarde: ' + error.message, 'error');
+            }
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour la commission d'un projet
+        async function updateProjectCommission() {
+            try {
+                const projectId = document.getElementById('edit-project-commission-rate').getAttribute('data-project-id');
+                const commissionRate = parseFloat(document.getElementById('edit-project-commission-rate').value);
+                const note = document.getElementById('edit-project-commission-note').value;
+                
+                const project = projects.find(p => p.id == projectId);
+                if (!project) {
+                    showNotification('Projet non trouvé', 'error');
+                    return;
+                }
+                
+                const commissionData = {
+                    project_id: projectId,
+                    commission_rate: commissionRate,
+                    collected_amount: project.collected,
+                    status: 'pending',
+                    note: note || null,
+                    updated_at: new Date().toISOString()
+                };
+                
+                if (isSupabaseConnected && window.supabaseClient) {
+                    // Vérifier si la commission existe déjà
+                    const { data: existingCommission } = await window.supabaseClient
+                        .from('commissions')
+                        .select('id')
+                        .eq('project_id', projectId)
+                        .single();
+                    
+                    if (existingCommission) {
+                        // Mettre à jour
+                        const { error } = await window.supabaseClient
+                            .from('commissions')
+                            .update(commissionData)
+                            .eq('id', existingCommission.id);
+                        
+                        if (error) throw error;
+                    } else {
+                        // Créer
+                        const { error } = await window.supabaseClient
+                            .from('commissions')
+                            .insert([commissionData]);
+                        
+                        if (error) throw error;
+                    }
+                }
+                
+                showNotification('Commission du projet mise à jour');
+                closeModal('editProjectCommissionModal');
+                
+                // Recharger les commissions
+                await loadCommissions();
+                
+            } catch (error) {
+                console.error('❌ Erreur mise à jour commission:', error);
+                showNotification('Erreur lors de la mise à jour: ' + error.message, 'error');
+            }
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Exporter les données admin
+        function exportAdminData() {
+            openModal('exportDataModal');
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Générer l'export
+        async function generateExport() {
+            const exportProgress = document.getElementById('exportProgress');
+            if (exportProgress) {
+                exportProgress.style.display = 'block';
             }
             
-            // Bouton suivant
-            const nextButton = document.createElement('button');
-            nextButton.className = 'pagination-number';
-            nextButton.innerHTML = '&raquo;';
-            nextButton.disabled = currentUserPage === totalPages;
-            nextButton.onclick = () => {
-                if (currentUserPage < totalPages) {
-                    currentUserPage++;
-                    loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
+            try {
+                // Simuler le temps de génération
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Récupérer les paramètres d'export
+                const exportFormat = document.querySelector('input[name="exportFormat"]:checked').value;
+                const exportPeriod = document.getElementById('exportPeriod').value;
+                
+                // Préparer les données
+                let exportData = {
+                    users: users,
+                    projects: projects,
+                    contributions: contributions,
+                    transactions: pendingTransactions,
+                    commissions: commissions,
+                    kyc: kycVerifications
+                };
+                
+                // Filtrer par période si nécessaire
+                if (exportPeriod !== 'all') {
+                    // Implémenter le filtrage par période
+                    console.log('Filtrage par période:', exportPeriod);
                 }
-            };
-            paginationNumbers.appendChild(nextButton);
+                
+                // Générer le fichier
+                let fileName = `gessinvest_export_${new Date().toISOString().split('T')[0]}`;
+                let mimeType = '';
+                let content = '';
+                
+                if (exportFormat === 'csv') {
+                    fileName += '.csv';
+                    mimeType = 'text/csv';
+                    // Générer le CSV
+                    content = generateCSV(exportData);
+                } else if (exportFormat === 'excel') {
+                    fileName += '.xlsx';
+                    mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                    // Pour Excel, on utiliserait une bibliothèque comme SheetJS
+                    showNotification('Export Excel non implémenté dans cette version', 'warning');
+                    return;
+                } else if (exportFormat === 'pdf') {
+                    fileName += '.pdf';
+                    mimeType = 'application/pdf';
+                    // Pour PDF, on utiliserait une bibliothèque comme jsPDF
+                    showNotification('Export PDF non implémenté dans cette version', 'warning');
+                    return;
+                }
+                
+                // Télécharger le fichier
+                downloadFile(content, fileName, mimeType);
+                
+                showNotification('Export généré avec succès');
+                closeModal('exportDataModal');
+                
+            } catch (error) {
+                console.error('❌ Erreur génération export:', error);
+                showNotification('Erreur lors de la génération: ' + error.message, 'error');
+            } finally {
+                if (exportProgress) {
+                    exportProgress.style.display = 'none';
+                }
+            }
         }
 
-        // Gestion des filtres avancés
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Générer un CSV
+        function generateCSV(data) {
+            let csv = '';
+            
+            // Générer l'en-tête
+            csv += "GESSINVEST - Export de données\n";
+            csv += `Date: ${new Date().toLocaleDateString()}\n\n`;
+            
+            // Section utilisateurs
+            if (data.users && data.users.length > 0) {
+                csv += "UTILISATEURS\n";
+                csv += "Nom,Email,Téléphone,Rôle,Statut,Solde,Total investi,Date inscription\n";
+                data.users.forEach(user => {
+                    csv += `"${user.name || ''}","${user.email}","${user.phone || ''}",${user.role},${user.status},${user.balance || 0},${user.total_invested || 0},"${new Date(user.created_at).toLocaleDateString()}"\n`;
+                });
+                csv += "\n";
+            }
+            
+            // Section projets
+            if (data.projects && data.projects.length > 0) {
+                csv += "PROJETS\n";
+                csv += "Nom,Description,Localisation,Objectif,Collecté,Rendement,Durée,Statut\n";
+                data.projects.forEach(project => {
+                    csv += `"${project.name}","${project.description}","${project.location}",${project.target},${project.collected},${project.return_rate || 0},${project.days_left || 0},${project.status}\n`;
+                });
+                csv += "\n";
+            }
+            
+            // Section investissements
+            if (data.contributions && data.contributions.length > 0) {
+                csv += "INVESTISSEMENTS\n";
+                csv += "Utilisateur,Projet,Montant,Méthode,Statut,Date\n";
+                data.contributions.forEach(contribution => {
+                    const user = users.find(u => u.id === contribution.member_id);
+                    const project = projects.find(p => p.id === contribution.project_id);
+                    csv += `"${user ? user.name : 'Inconnu'}","${project ? project.name : 'Inconnu'}",${contribution.amount},${contribution.payment_method},${contribution.status},"${new Date(contribution.created_at).toLocaleDateString()}"\n`;
+                });
+                csv += "\n";
+            }
+            
+            return csv;
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Télécharger un fichier
+        function downloadFile(content, fileName, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Basculer les filtres avancés
         function toggleAdvancedFilters() {
-            const filters = document.getElementById('advancedFilters');
-            filters.classList.toggle('active');
+            const advancedFilters = document.getElementById('advancedFilters');
+            if (advancedFilters) {
+                advancedFilters.classList.toggle('active');
+            }
         }
 
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Appliquer les filtres avancés
         function applyAdvancedFilters() {
             // Récupérer les valeurs des filtres
             advancedFilters.dateStart = document.getElementById('filterDateStart').value;
@@ -6903,15 +7246,15 @@
             advancedFilters.sortBy = document.getElementById('filterSortBy').value;
             
             // Recharger les utilisateurs avec les filtres
-            currentUserPage = 1;
             loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
             
-            // Fermer les filtres
+            // Masquer les filtres avancés
             toggleAdvancedFilters();
             
-            showNotification('Filtres appliqués avec succès');
+            showNotification('Filtres appliqués');
         }
 
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Réinitialiser les filtres avancés
         function resetAdvancedFilters() {
             // Réinitialiser les champs
             document.getElementById('filterDateStart').value = '';
@@ -6922,7 +7265,7 @@
             document.getElementById('filterPaymentMethod').value = '';
             document.getElementById('filterSortBy').value = 'created_at_desc';
             
-            // Réinitialiser l'objet de filtres
+            // Réinitialiser les variables
             advancedFilters = {
                 dateStart: '',
                 dateEnd: '',
@@ -6933,138 +7276,111 @@
                 sortBy: 'created_at_desc'
             };
             
-            // Recharger les utilisateurs sans filtres
-            currentUserPage = 1;
+            // Recharger les utilisateurs
             loadUsers(currentUserPage, userPageSize, userSearchTerm, userRoleFilter, userStatusFilter, userKYCStatusFilter);
             
             showNotification('Filtres réinitialisés');
         }
 
-        // Calendrier des paiements
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Mettre à jour le calendrier des paiements
         function updatePaymentCalendar() {
-            const monthSelect = document.getElementById('paymentCalendarMonth');
-            const selectedMonth = parseInt(monthSelect.value);
-            
-            // Générer le calendrier pour le mois sélectionné
-            generatePaymentCalendar(selectedMonth);
-        }
-
-        function refreshPaymentCalendar() {
-            const monthSelect = document.getElementById('paymentCalendarMonth');
-            updatePaymentCalendar();
-            showNotification('Calendrier rafraîchi');
-        }
-
-        function generatePaymentCalendar(monthOffset = 0) {
             const calendar = document.getElementById('paymentCalendar');
             if (!calendar) return;
             
-            // Date actuelle
+            const monthSelector = document.getElementById('paymentCalendarMonth');
+            const monthOffset = parseInt(monthSelector.value);
+            
+            // Générer le calendrier pour le mois sélectionné
             const now = new Date();
-            const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+            const targetMonth = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
             
-            // Noms des jours
-            const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+            // Générer les en-têtes de jours
+            let calendarHTML = '';
+            const dayHeaders = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
             
-            // Vider le calendrier
-            calendar.innerHTML = '';
-            
-            // En-têtes des jours
-            dayNames.forEach(day => {
-                const dayHeader = document.createElement('div');
-                dayHeader.className = 'calendar-day calendar-day-header';
-                dayHeader.textContent = day;
-                calendar.appendChild(dayHeader);
+            dayHeaders.forEach(day => {
+                calendarHTML += `<div class="calendar-day calendar-day-header">${day}</div>`;
             });
             
-            // Premier jour du mois
-            const firstDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
-            // Dernier jour du mois
-            const lastDay = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
-            
-            // Jours du mois précédent
-            const startDay = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
-            
             // Remplir le calendrier
-            const daysInMonth = lastDay.getDate();
-            let dayCount = 1;
+            const daysInMonth = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
+            const firstDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1).getDay();
             
-            // Créer 42 cases (6 semaines)
-            for (let i = 0; i < 42; i++) {
-                const dayDiv = document.createElement('div');
-                dayDiv.className = 'calendar-day';
-                
-                if (i >= startDay && dayCount <= daysInMonth) {
-                    // Jour du mois en cours
-                    dayDiv.textContent = dayCount;
-                    
-                    // Vérifier s'il y a des paiements ce jour
-                    const hasPayment = Math.random() > 0.7; // Exemple aléatoire
-                    if (hasPayment) {
-                        dayDiv.classList.add('has-payment');
-                        dayDiv.onclick = () => showPaymentDetails(targetDate.getFullYear(), targetDate.getMonth(), dayCount);
-                    }
-                    
-                    dayCount++;
-                } else if (i < startDay) {
-                    // Jour du mois précédent
-                    const prevMonthDays = new Date(targetDate.getFullYear(), targetDate.getMonth(), 0).getDate();
-                    dayDiv.textContent = prevMonthDays - startDay + i + 1;
-                    dayDiv.style.opacity = '0.3';
-                } else {
-                    // Jour du mois suivant
-                    dayDiv.textContent = dayCount - daysInMonth;
-                    dayDiv.style.opacity = '0.3';
-                    dayCount++;
-                }
-                
-                calendar.appendChild(dayDiv);
+            // Ajuster pour commencer à lundi
+            let startOffset = firstDay === 0 ? 6 : firstDay - 1;
+            
+            // Cases vides avant le premier jour
+            for (let i = 0; i < startOffset; i++) {
+                calendarHTML += `<div class="calendar-day"></div>`;
             }
+            
+            // Jours du mois
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                // Vérifier s'il y a des paiements ce jour
+                const hasPayment = checkIfPaymentDay(dateStr);
+                
+                calendarHTML += `
+                    <div class="calendar-day ${hasPayment ? 'has-payment' : ''}" onclick="showPaymentDetails('${dateStr}')">
+                        ${day}
+                    </div>
+                `;
+            }
+            
+            calendar.innerHTML = calendarHTML;
         }
 
-        function showPaymentDetails(year, month, day) {
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Vérifier s'il y a des paiements un jour donné
+        function checkIfPaymentDay(dateStr) {
+            // Exemple de vérification - à adapter avec vos données réelles
+            const paymentDays = ['2025-01-15', '2025-01-20', '2025-01-25'];
+            return paymentDays.includes(dateStr);
+        }
+
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Afficher les détails des paiements
+        function showPaymentDetails(dateStr) {
             const detailsContainer = document.getElementById('paymentCalendarDetails');
             if (!detailsContainer) return;
             
-            // Exemple de données
+            // Exemple de données - à remplacer par vos données réelles
             const payments = [
                 { user: 'Jean Dupont', amount: 50000, project: 'Résidence Rue de 40' },
                 { user: 'Marie Martin', amount: 75000, project: 'Complexe Commercial Moundou' }
             ];
             
-            detailsContainer.innerHTML = `
-                <h4>Paiements du ${day}/${month + 1}/${year}</h4>
+            let detailsHTML = `
                 <div class="payment-details">
-                    ${payments.map(payment => `
-                        <p><strong>${payment.user}</strong>: ${formatCFA(payment.amount)} - ${payment.project}</p>
-                    `).join('')}
-                </div>
+                    <h4>Paiements du ${new Date(dateStr).toLocaleDateString()}</h4>
             `;
+            
+            if (payments.length > 0) {
+                payments.forEach(payment => {
+                    detailsHTML += `
+                        <div style="margin-top: 10px; padding: 10px; background: white; border-radius: 8px;">
+                            <div><strong>${payment.user}</strong></div>
+                            <div>Projet: ${payment.project}</div>
+                            <div>Montant: ${formatCFA(payment.amount)}</div>
+                        </div>
+                    `;
+                });
+            } else {
+                detailsHTML += `<p>Aucun paiement prévu pour cette date.</p>`;
+            }
+            
+            detailsHTML += `</div>`;
+            detailsContainer.innerHTML = detailsHTML;
             detailsContainer.style.display = 'block';
         }
 
-        // Export des données
-        function exportAdminData() {
-            openModal('exportDataModal');
+        // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rafraîchir le calendrier des paiements
+        function refreshPaymentCalendar() {
+            updatePaymentCalendar();
+            showNotification('Calendrier actualisé');
         }
 
-        function generateExport() {
-            const format = document.querySelector('input[name="exportFormat"]:checked').value;
-            const period = document.getElementById('exportPeriod').value;
-            
-            // Afficher l'indicateur de progression
-            document.getElementById('exportProgress').style.display = 'block';
-            
-            // Simuler le temps de génération
-            setTimeout(() => {
-                document.getElementById('exportProgress').style.display = 'none';
-                showNotification(`Export ${format} généré avec succès pour la période ${period}`);
-                closeModal('exportDataModal');
-            }, 2000);
-        }
-
-        // Initialiser le calendrier au chargement
-        generatePaymentCalendar(0);
+        // Initialiser le calendrier
+        updatePaymentCalendar();
     </script>
 </body>
 </html>
