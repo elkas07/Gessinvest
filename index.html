@@ -5864,60 +5864,86 @@ const newProject = {
                     showNotification(`Investissement de ${formatCFA(transaction.amount)} validé ! Projet mis à jour.`);
                 }
 
-                // 4. Mettre à jour le statut de la transaction
-const { error: updateStatusError } = await window.supabaseClient
-    .from('transactions')
-    .update({ 
-        status: 'validated', 
-        validated_at: new Date().toISOString()
-    })
-    .eq('id', transactionId);
+                // 4. Mettre à jour le statut de la transaction dans Supabase
+                const { error: updateStatusError } = await window.supabaseClient
+                    .from('transactions')
+                    .update({ 
+                        status: 'validated', 
+                        validated_at: new Date().toISOString()
+                    })
+                    .eq('id', transactionId);
 
-if (updateStatusError) throw updateStatusError;
+                if (updateStatusError) throw updateStatusError;
 
-// 5. Retirer la ligne du tableau
-removeTransactionRow(transactionId);
+                // 5. Retirer la ligne du tableau Admin immédiatement
+                removeTransactionRow(transactionId);
 
-// 6. Attendre et synchroniser les données membres
-setTimeout(async () => {
-    // Rechargement global
-    await Promise.all([
-        loadUsers(),
-        loadContributions(),
-        loadPendingTransactions()
-    ]);
-
-    // ⭐ SYNCHRONISATION DU MEMBRE
-    if (currentUser) {
-        // On récupère les données fraîches du membre dans la liste users
-        const freshUser = users.find(u => u.id === currentUser.id);
-        if (freshUser) {
-            currentUser.balance = freshUser.balance; // Mise à jour du solde
+                // 6. Attendre un court instant (1.5s) pour laisser le Trigger SQL finir
+                setTimeout(async () => {
+                    console.log('🔄 Synchronisation forcée des compteurs...');
+                    
+                    // On recharge toutes les données fraîches depuis Supabase
+                    await Promise.all([
+                        loadPendingTransactions(),
+                        loadProjects(),
+                        loadContributions(),
+                        loadUsers() // Met à jour la liste globale (users ou allUsers)
+                    ]);
+                    
+                    // ⭐ CORRECTION : Mettre à jour manuellement l'objet d'affichage (currentUser)
+                    if (currentUser) {
+                        // On cherche les nouvelles valeurs (balance: 1460000, total_invested: 70000)
+                        const freshUserData = (typeof users !== 'undefined' ? users : allUsers)
+                            .find(u => u.id === currentUser.id || u.email === currentUser.email);
+                        
+                        if (freshUserData) {
+                            // On injecte les données réelles de la base dans l'objet de session
+                            currentUser.balance = freshUserData.balance;
+                            currentUser.total_invested = freshUserData.total_invested;
+                            
+                            // Recalculer les Gains Estimés en fonction du nouvel investissement
+                            const validContribs = allContributions.filter(c => 
+                                (c.member_id === currentUser.id) && 
+                                (c.status === 'validé' || c.status === 'validated')
+                            );
+                            
+                            currentUser.gains_estimes = validContribs.reduce((sum, c) => {
+                                const project = allProjects.find(p => p.id === c.project_id);
+                                const yieldRate = project ? (parseFloat(project.yield || project.rendement) / 100) : 0;
+                                return sum + (c.amount * yieldRate);
+                            }, 0);
+                            
+                            console.log('💰 Données synchronisées :', {
+                                solde: currentUser.balance,
+                                investi: currentUser.total_invested
+                            });
+                        }
+                    }
+                    
+                    // 7. Mettre à jour les dashboards à l'écran
+                    if (currentUser && currentUser.email === 'elkas07@live.fr') {
+                        if (typeof updateAdminDashboard === 'function') updateAdminDashboard();
+                    } 
+                    
+                    // Appeler systématiquement pour rafraîchir les blocs "Solde" et "Investi"
+                    if (typeof updateMemberDashboard === 'function') {
+                        updateMemberDashboard();
+                    } else {
+                        // Si l'affichage reste figé malgré tout
+                        window.location.reload();
+                    }
+                }, 1500); 
+                
+                console.log('✅ Transaction validée avec succès:', transactionId);
+                
+            } catch (error) {
+                console.error('❌ Erreur validation transaction:', error);
+                if (typeof showNotification === 'function') {
+                    showNotification('Erreur lors de la validation: ' + error.message, 'error');
+                }
+            }
         }
-
-        // Recalcul manuel du "Total investi" pour l'affichage
-        const memberContribs = allContributions.filter(c => 
-            c.member_id === currentUser.id && (c.status === 'validé' || c.status === 'validated')
-        );
-        currentUser.total_invested = memberContribs.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
-        
-        // Recalcul des gains
-        currentUser.gains_estimes = memberContribs.reduce((sum, c) => {
-            const proj = allProjects.find(p => p.id === c.project_id);
-            return sum + (c.amount * (parseFloat(proj?.yield || 0) / 100));
-        }, 0);
-    }
-
-    // 7. Mise à jour des Dashboards
-    if (currentUser && currentUser.email === 'elkas07@live.fr') {
-        updateAdminDashboard();
-    }
-    
-    // Obligatoire pour rafraîchir les boîtes Solde/Investi/Gains
-    if (typeof updateMemberDashboard === 'function') {
-        updateMemberDashboard();
-    }
-}, 1500);
+		
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une transaction
         async function rejectTransaction(transactionId) {
             if (!isSupabaseConnected || !window.supabaseClient) {
