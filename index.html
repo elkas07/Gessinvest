@@ -6464,67 +6464,76 @@ document.getElementById('editProjectForm').onsubmit = function(e) {
             updateAdminCommissionsList();
         }
 
-        // Mettre à jour le dashboard membre
+        // ==========================================
+// 1. MISE À JOUR DU DASHBOARD MEMBRE
+// ==========================================
 function updateMemberDashboard() {
     if (!currentUser) return;
 
-    // IMPORTANT : On cherche les données fraîches dans la liste globale 'users'
-    // qui a été mise à jour par loadUsers() après la validation
+    // Récupération des données fraîches depuis la liste globale 'users'
+    // C'est ici que le solde de 1 460 000 CFA est récupéré
     const member = users.find(u => u.email === currentUser.email || u.id === currentUser.id);
-    if (!member) return;
+    
+    if (!member) {
+        console.warn("⚠️ Données du membre non trouvées dans la liste globale.");
+        return;
+    }
 
-    // Mise à jour des informations de bienvenue
+    // Mise à jour du message d'accueil
     const welcomeMsg = document.getElementById('memberWelcomeMessage');
     if (welcomeMsg) {
         welcomeMsg.textContent = `Bonjour ${member.name || currentUser.email.split('@')[0]}, bienvenue dans votre espace investisseur`;
     }
 
-    // MISE À JOUR DU SOLDE ET DE L'INVESTISSEMENT (Données réelles Supabase)
-    // On utilise les valeurs recalculées par le Trigger SQL (balance et total_invested)
+    // Mise à jour des compteurs (Solde, Investi, Disponible)
+    // On utilise member.balance et member.total_invested mis à jour par Supabase
     document.getElementById('memberBalance').textContent = formatCFA(member.balance || 0);
     document.getElementById('totalInvested').textContent = formatCFA(member.total_invested || 0);
     document.getElementById('availableBalance').textContent = formatCFA(member.balance || 0);
     
-    // Calculer les gains estimés (Basé sur le total investi réel de la base)
-    const expectedReturn = (member.total_invested || 0) * 0.12; // 12% de rendement estimé
+    // Calcul des gains estimés (Exemple : 12% du total investi)
+    // Cela affichera les 8 400 CFA vus sur vos captures
+    const expectedReturn = (member.total_invested || 0) * 0.12; 
     document.getElementById('expectedReturn').textContent = formatCFA(expectedReturn);
     
-    // Compter les projets actifs
+    // Projets actifs
     const activeProjectsCount = projects.filter(p => p.status === 'active' || p.status === 'actif').length;
     document.getElementById('activeProjects').textContent = activeProjectsCount;
 
-    // Mettre à jour les tableaux détaillés du membre
+    // Lancer la mise à jour des tableaux de données
     updateMemberInvestments(member.id);
     
-    // Vérifier si la fonction existe avant de l'appeler
     if (typeof updateMemberPendingTransactions === 'function') {
         updateMemberPendingTransactions(member.id);
     }
 }
 
-// Mettre à jour les investissements du membre
+// ==========================================
+// 2. MISE À JOUR DU TABLEAU DES INVESTISSEMENTS
+// ==========================================
 function updateMemberInvestments(memberId) {
     const tbody = document.getElementById('memberInvestments');
     if (!tbody) return;
 
     tbody.innerHTML = '';
 
-    // Filtrer les contributions appartenant au membre (via member_id ou user_id)
+    // Filtrage des contributions pour ce membre précis
     const memberContributions = contributions.filter(c => c.member_id === memberId || c.user_id === memberId);
     
     if (memberContributions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucun investissement trouvé</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucun investissement validé</td></tr>';
         return;
     }
 
     memberContributions.forEach(contribution => {
-        // Trouver le projet associé pour afficher le nom et le rendement
+        // Recherche du projet associé pour le nom et le rendement
         const project = projects.find(p => p.id == contribution.project_id);
         if (!project) return;
 
-        // GESTION DES STATUTS : On accepte 'completed', 'validated' ou 'validé' pour le badge vert
-        const currentStatus = (contribution.status || '').toLowerCase();
-        const isValide = currentStatus === 'completed' || currentStatus === 'validated' || currentStatus === 'validé';
+        // GESTION DU STATUT : Correction pour accepter 'validated' et 'validé'
+        // Cela permet de passer le badge au vert (status-active)
+        const statusRaw = (contribution.status || '').toLowerCase();
+        const isValide = statusRaw === 'completed' || statusRaw === 'validated' || statusRaw === 'validé';
 
         const row = document.createElement('tr');
         row.innerHTML = `
