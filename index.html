@@ -5865,10 +5865,10 @@ const newProject = {
                 }
 
                 // 4. Mettre à jour le statut de la transaction
-               const { error: updateStatusError } = await window.supabaseClient
+                const { error: updateStatusError } = await window.supabaseClient
                     .from('transactions')
                     .update({ 
-                        status: 'validated',
+                        status: 'validated', 
                         validated_at: new Date().toISOString()
                     })
                     .eq('id', transactionId);
@@ -5878,29 +5878,66 @@ const newProject = {
                 // 5. Retirer la ligne du tableau
                 removeTransactionRow(transactionId);
 
-                // 6. Attendre un court instant puis mettre à jour les données
+                // 6. Attendre un court instant puis synchroniser TOUTES les données
                 setTimeout(async () => {
-                    await loadPendingTransactions();
-                    await loadProjects();
-                    await loadContributions();
-                    await loadUsers();
+                    console.log('🔄 Synchronisation forcée des compteurs...');
                     
-                    // 7. Mettre à jour les dashboards
-                    if (currentUser && currentUser.email === 'elkas07@live.fr') {
-                        updateAdminDashboard();
-                    } else if (currentUser) {
-                        updateMemberDashboard();
+                    // Chargement des données fraîches depuis Supabase
+                    await Promise.all([
+                        loadPendingTransactions(),
+                        loadProjects(),
+                        loadContributions(),
+                        loadUsers()
+                    ]);
+                    
+                    // ⭐ CORRECTION : Mise à jour manuelle des statistiques du membre actuel
+                    if (currentUser) {
+                        // Récupérer le nouveau solde calculé par le Trigger SQL (balance)
+                        const freshUserData = (typeof users !== 'undefined' ? users : allUsers).find(u => u.id === currentUser.id);
+                        if (freshUserData) {
+                            currentUser.balance = freshUserData.balance;
+                        }
+
+                        // Recalculer le "Total investi" à partir de la table contributions
+                        const userInvestments = allContributions.filter(c => 
+                            (c.member_id === currentUser.id || c.user_id === currentUser.id) && 
+                            (c.status === 'validé' || c.status === 'validated')
+                        );
+                        
+                        currentUser.total_invested = userInvestments.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+                        
+                        // Recalculer les "Gains estimés" (Exemple : Total * Taux de rendement)
+                        currentUser.gains_estimes = userInvestments.reduce((sum, c) => {
+                            const project = allProjects.find(p => p.id === c.project_id);
+                            const rate = project ? (parseFloat(project.yield || project.rendement) / 100) : 0;
+                            return sum + (c.amount * rate);
+                        }, 0);
                     }
-                }, 1000); 
+                    
+                    // 7. Mettre à jour l'affichage des dashboards
+                    if (currentUser && currentUser.email === 'elkas07@live.fr') {
+                        if (typeof updateAdminDashboard === 'function') updateAdminDashboard();
+                    } 
+                    
+                    // Toujours appeler updateMemberDashboard pour rafraîchir les 4 blocs du haut
+                    if (typeof updateMemberDashboard === 'function') {
+                        updateMemberDashboard();
+                    } else {
+                        // Si l'affichage ne se met pas à jour, on force le rechargement
+                        window.location.reload();
+                    }
+                    
+                    console.log('📊 Dashboard mis à jour. Nouveau solde:', currentUser ? currentUser.balance : 'N/A');
+                }, 1500); 
                 
-                console.log('✅ Transaction validée avec succès:', transactionId);
+                console.log('✅ Transaction validée et synchronisée:', transactionId);
                 
             } catch (error) {
                 console.error('❌ Erreur validation transaction:', error);
                 showNotification('Erreur lors de la validation: ' + error.message, 'error');
             }
         }
-
+		
         // ⭐⭐ NOUVELLE FONCTION ⭐⭐ - Rejeter une transaction
         async function rejectTransaction(transactionId) {
             if (!isSupabaseConnected || !window.supabaseClient) {
