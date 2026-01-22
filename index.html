@@ -5381,56 +5381,68 @@
                 sectionToShow.style.display = 'block';
                 
                 // ⭐⭐ NOUVELLE CORRECTION : Actualiser automatiquement les données
-                if (sectionId === 'memberDashboard' && currentUser && currentUser.email !== 'elkas07@live.fr') {
-                    // Forcer le rechargement des données du membre
-                    setTimeout(async () => {
-                        if (isSupabaseConnected && window.supabaseClient) {
-                            const { data: memberData, error } = await window.supabaseClient
-                                .from('members')
-                                .select('*')
-                                .eq('email', currentUser.email)
-                                .single();
-                            
-                            if (memberData) {
-                                currentUser.balance = memberData.balance || 0;
-                                currentUser.total_invested = memberData.total_invested || 0;
-                                updateMemberDashboard();
-                            }
-                        }
-                    }, 100);
-                } else if (sectionId === 'adminDashboard' && currentUser && currentUser.email === 'elkas07@live.fr') {
-                    updateAdminDashboard();
-                }
-            } else {
-                const dashboardSections = ['memberDashboard', 'adminDashboard'];
-                dashboardSections.forEach(id => {
-                    const elem = document.getElementById(id);
-                    if (elem) elem.style.display = 'none';
-                });
-                
-                const elem = document.getElementById(sectionId + 'Section');
-                if (elem) elem.style.display = 'block';
-            }
+if (sectionId === 'memberDashboard' && currentUser && currentUser.email !== 'elkas07@live.fr') {
+    // Forcer le rechargement des données du membre
+    setTimeout(async () => {
+        if (isSupabaseConnected && window.supabaseClient) {
+            const { data: memberData, error } = await window.supabaseClient
+                .from('member_dashboard')   // ✅ utiliser la vue consolidée
+                .select('*')
+                .eq('id', currentUser.id)   // ✅ filtrer par UUID du membre
+                .single();
             
-            if (sectionId === 'home') {
-                document.getElementById('home').style.display = 'block';
-                document.getElementById('projectsSection').style.display = 'block';
-                document.getElementById('how-it-works').style.display = 'block';
-            }
-            
-            closeMobileMenu();
-        }
-
-        function showAllProjects() {
-            showSection('projectsSection');
-        }
-
-        function showProjectDetails(projectId) {
-            const project = projects.find(p => p.id == projectId);
-            if (project) {
-                alert(`Détails du projet: ${project.name}\n\n${project.description}\n\nLocalisation: ${project.location}\nRendement: ${project.return_rate || 12}% annuel\nDurée: ${project.days_left || 24} mois\nObjectif: ${formatCFA(project.target)}\nCollecté: ${formatCFA(project.collected)}\nReste à collecter: ${formatCFA(project.target - project.collected)}`);
+            if (memberData) {
+                currentUser.balance = memberData.balance || 0;
+                currentUser.total_invested = memberData.total_invested || 0;
+                currentUser.gain_estime = memberData.gain_estime || 0;
+                currentUser.projets_actifs = memberData.projets_actifs || 0;
+                updateMemberDashboard();
             }
         }
+    }, 100);
+
+    // ✅ Abonnement Realtime sur la table investments
+    window.supabaseClient
+        .channel('investments-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'investments' }, payload => {
+            console.log('🔄 Changement détecté dans investments:', payload);
+            // Recharger la vue member_dashboard
+            refreshDashboard();
+        })
+        .subscribe();
+
+} else if (sectionId === 'adminDashboard' && currentUser && currentUser.email === 'elkas07@live.fr') {
+    updateAdminDashboard();
+} else {
+    const dashboardSections = ['memberDashboard', 'adminDashboard'];
+    dashboardSections.forEach(id => {
+        const elem = document.getElementById(id);
+        if (elem) elem.style.display = 'none';
+    });
+    
+    const elem = document.getElementById(sectionId + 'Section');
+    if (elem) elem.style.display = 'block';
+}
+
+if (sectionId === 'home') {
+    document.getElementById('home').style.display = 'block';
+    document.getElementById('projectsSection').style.display = 'block';
+    document.getElementById('how-it-works').style.display = 'block';
+}
+
+closeMobileMenu();
+
+function showAllProjects() {
+    showSection('projectsSection');
+}
+
+function showProjectDetails(projectId) {
+    const project = projects.find(p => p.id == projectId);
+    if (project) {
+        alert(`Détails du projet: ${project.name}\n\n${project.description}\n\nLocalisation: ${project.location}\nRendement: ${project.return_rate || 12}% annuel\nDurée: ${project.days_left || 24} mois\nObjectif: ${formatCFA(project.target)}\nCollecté: ${formatCFA(project.collected)}\nReste à collecter: ${formatCFA(project.target - project.collected)}`);
+    }
+}
+
 
         // ⭐⭐ CORRECTION AMÉLIORÉE ⭐⭐ - Récupérer ou créer un membre avec mise à jour automatique
         async function getOrCreateMember(email, name = '', phone = '') {
