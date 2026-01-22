@@ -5445,68 +5445,83 @@ function showProjectDetails(projectId) {
 
 
         // ⭐⭐ CORRECTION AMÉLIORÉE ⭐⭐ - Récupérer ou créer un membre avec mise à jour automatique
-        async function getOrCreateMember(email, name = '', phone = '') {
-            if (!isSupabaseConnected || !window.supabaseClient) {
-                console.log('👤 Mode hors ligne - Impossible de récupérer/créer un membre');
-                return null;
-            }
+async function getOrCreateMember(email, name = '', phone = '') {
+    if (!isSupabaseConnected || !window.supabaseClient) {
+        console.log('👤 Mode hors ligne - Impossible de récupérer/créer un membre');
+        return null;
+    }
 
-            try {
-                console.log('👤 Recherche du membre:', email);
-                
-                const { data: existingMember, error: searchError } = await window.supabaseClient
-                    .from('members')
-                    .select('*')
-                    .eq('email', email)
-                    .single();
+    try {
+        console.log('👤 Recherche du membre:', email);
+        
+        // ✅ On récupère d'abord l'UUID du membre via la table "members"
+        const { data: existingMember, error: searchError } = await window.supabaseClient
+            .from('members')
+            .select('id, email, name, phone')
+            .eq('email', email)
+            .single();
 
-                if (searchError && searchError.code !== 'PGRST116') {
-                    console.error('❌ Erreur recherche membre:', searchError);
-                    throw searchError;
-                }
-
-                if (existingMember) {
-                    console.log('✅ Membre trouvé:', existingMember);
-                    
-                    // ⭐⭐ NOUVELLE CORRECTION : Mettre à jour l'utilisateur courant avec les données réelles
-                    if (currentUser && currentUser.email === email) {
-                        currentUser.balance = existingMember.balance || 0;
-                        currentUser.total_invested = existingMember.total_invested || 0;
-                        updateMemberDashboard();
-                    }
-                    
-                    return existingMember;
-                }
-
-                console.log('📝 Création d\'un nouveau membre pour:', email);
-                
-                const { data: newMember, error: createError } = await window.supabaseClient
-                    .from('members')
-                    .insert({
-                        email: email,
-                        name: name || email.split('@')[0],
-                        phone: phone || '',
-                        role: 'investor',
-                        status: 'active',
-                        balance: 0,
-                        total_invested: 0
-                    })
-                    .select()
-                    .single();
-
-                if (createError) {
-                    console.error('❌ Erreur création membre:', createError);
-                    throw createError;
-                }
-
-                console.log('✅ Nouveau membre créé:', newMember);
-                return newMember;
-                
-            } catch (error) {
-                console.error('❌ Erreur getOrCreateMember:', error);
-                return null;
-            }
+        if (searchError && searchError.code !== 'PGRST116') {
+            console.error('❌ Erreur recherche membre:', searchError);
+            throw searchError;
         }
+
+        if (existingMember) {
+            console.log('✅ Membre trouvé:', existingMember);
+
+            // ✅ On recharge les vraies données depuis la vue "member_dashboard"
+            const { data: dashboardData, error: dashError } = await window.supabaseClient
+                .from('member_dashboard')
+                .select('*')
+                .eq('id', existingMember.id)
+                .single();
+
+            if (dashError) {
+                console.error('❌ Erreur lecture dashboard:', dashError);
+            }
+
+            if (dashboardData && currentUser && currentUser.email === email) {
+                currentUser.id = existingMember.id;
+                currentUser.balance = dashboardData.balance || 0;
+                currentUser.total_invested = dashboardData.total_invested || 0;
+                currentUser.gain_estime = dashboardData.gain_estime || 0;
+                currentUser.projets_actifs = dashboardData.projets_actifs || 0;
+                updateMemberDashboard();
+            }
+            
+            return existingMember;
+        }
+
+        console.log('📝 Création d\'un nouveau membre pour:', email);
+        
+        const { data: newMember, error: createError } = await window.supabaseClient
+            .from('members')
+            .insert({
+                email: email,
+                name: name || email.split('@')[0],
+                phone: phone || '',
+                role: 'investor',
+                status: 'active',
+                balance: 0,
+                total_invested: 0
+            })
+            .select()
+            .single();
+
+        if (createError) {
+            console.error('❌ Erreur création membre:', createError);
+            throw createError;
+        }
+
+        console.log('✅ Nouveau membre créé:', newMember);
+        return newMember;
+        
+    } catch (error) {
+        console.error('❌ Erreur getOrCreateMember:', error);
+        return null;
+    }
+}
+
 
         // ⭐⭐ CORRECTION CRITIQUE ⭐⭐ - Investment functions avec mise à jour automatique
         function updateAmountDisplay() {
