@@ -7,6 +7,7 @@ import { supabase } from './lib/supabase';
 
 const formatCFA = (val: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(val).replace('XOF', 'F CFA');
 
+// Composant Badge stylisé
 const Badge = ({ status }: { status: string }) => {
   const styles: Record<string, string> = {
     'Validé': 'bg-green-50 text-green-700 border-green-100',
@@ -64,7 +65,7 @@ const App: React.FC = () => {
       }
       if (trans) setTransactions(trans);
     } catch (e) {
-      console.error("Erreur de synchronisation", e);
+      console.error("Erreur Supabase", e);
     } finally {
       setLoading(false);
     }
@@ -157,9 +158,8 @@ const App: React.FC = () => {
           <div className="space-y-6 animate-fade">
              <DataTable title="Vérification des Comptes" data={allUsers.filter(u => u.kycStatus === 'pending' || u.kycStatus === 'verified')} columns={[
                { header: 'Utilisateur', render: (u) => <div className="font-bold text-sm">{u.name}</div> },
-               { header: 'E-mail', render: (u) => <div className="text-slate-400 text-xs">{u.email}</div> },
                { header: 'Statut', render: (u) => <Badge status={u.kycStatus} /> },
-               { header: 'Décision', render: (u) => (
+               { header: 'Actions', render: (u) => (
                  <div className="flex gap-2">
                    <button onClick={() => handleVerifyKYC(u.id, 'verified')} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase">Valider</button>
                    <button onClick={() => handleVerifyKYC(u.id, 'rejected')} className="bg-rose-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase">Rejeter</button>
@@ -180,7 +180,7 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 bg-[#0d1b2a] rounded-[2rem] p-10 text-white relative overflow-hidden bricks-shadow">
                 <div className="relative z-10">
-                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">Valeur de votre portefeuille</p>
+                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">Valeur du portefeuille</p>
                   <h2 className="text-6xl font-black tracking-tighter">{formatCFA(currentUser?.balance || 0)}</h2>
                   <div className="mt-8 flex gap-3">
                     <button className="bg-[#ff6b35] text-white px-8 py-3.5 rounded-xl font-bold text-xs bricks-button-shadow hover:scale-105 transition-all">Approvisionner</button>
@@ -200,7 +200,7 @@ const App: React.FC = () => {
                     <span className="text-slate-900">+12.4% / an</span>
                   </div>
                   <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase">
-                    <span>Identité</span>
+                    <span>Compte</span>
                     <Badge status={currentUser?.kycStatus || 'pending'} />
                   </div>
                 </div>
@@ -240,21 +240,16 @@ const App: React.FC = () => {
           <div className="max-w-xl mx-auto space-y-8 animate-fade py-10">
             <div className="bg-white p-12 rounded-[2.5rem] border border-slate-100 bricks-shadow flex flex-col gap-10">
               <div className="space-y-8">
-                <h3 className="text-3xl font-black text-slate-900 tracking-tighter">Votre futur avec GESS</h3>
+                <h3 className="text-3xl font-black text-slate-900 tracking-tighter">Simulateur de revenus</h3>
                 <div className="space-y-4">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Montant à investir</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Capital investi</label>
                   <input type="range" min="10000" max="10000000" step="10000" value={simAmount} onChange={(e) => setSimAmount(parseInt(e.target.value))} className="w-full h-2 bg-slate-100 rounded-full appearance-none accent-[#ff6b35] cursor-pointer" />
                   <div className="text-4xl font-black text-slate-900 tracking-tighter">{formatCFA(simAmount)}</div>
                 </div>
               </div>
-              <div className="bg-slate-50 p-8 rounded-3xl text-center space-y-6">
-                <div>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Revenus passifs par mois</p>
-                   <div className="text-5xl font-black text-[#ff6b35] tracking-tighter">{formatCFA(simAmount * 0.12 / 12)}</div>
-                </div>
-                <div className="pt-6 border-t border-slate-200">
-                   <p className="text-xs font-bold text-slate-500 uppercase">Soit <span className="text-emerald-600 font-black">{formatCFA(simAmount * 0.12)}</span> par an</p>
-                </div>
+              <div className="bg-slate-50 p-8 rounded-3xl text-center">
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Dividendes mensuels</p>
+                <div className="text-5xl font-black text-[#ff6b35] tracking-tighter">{formatCFA(simAmount * 0.12 / 12)}</div>
               </div>
             </div>
           </div>
@@ -273,11 +268,11 @@ const App: React.FC = () => {
                 </div>
              </div>
              <div className="bg-white p-10 rounded-[2rem] border border-slate-100 bricks-shadow space-y-6">
-                <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Documents officiels</h4>
+                <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Identité & Sécurité</h4>
                 <div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex justify-between items-center group cursor-pointer hover:border-[#ff6b35] transition-all">
                   <div className="flex flex-col">
                     <span className="text-sm font-bold text-slate-800">Pièce d'identité</span>
-                    <span className="text-[9px] text-slate-400 uppercase font-black">NNI ou PASSEPORT</span>
+                    <span className="text-[9px] text-slate-400 uppercase font-black">Charger mon document</span>
                   </div>
                   <div className="bg-slate-900 text-white p-3 rounded-xl group-hover:bg-[#ff6b35] transition-colors">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
@@ -300,37 +295,25 @@ const App: React.FC = () => {
           </div>
           <div className="flex gap-6 items-center">
             <button onClick={() => setView('app')} className="text-sm font-bold text-slate-500 hover:text-slate-900">Se connecter</button>
-            <button onClick={() => setView('app')} className="bg-[#ff6b35] text-white px-7 py-2.5 rounded-xl font-bold text-xs bricks-button-shadow hover:scale-105 transition-all uppercase">Ouvrir un compte</button>
+            <button onClick={() => setView('app')} className="bg-[#ff6b35] text-white px-7 py-2.5 rounded-xl font-bold text-xs bricks-button-shadow hover:scale-105 transition-all uppercase">Rejoindre GESS</button>
           </div>
         </nav>
 
         <div className="flex-1 flex flex-col items-center justify-center px-6 text-center py-24 bg-[#fcfcfc]">
           <h1 className="text-6xl md:text-8xl font-black text-[#0d1b2a] tracking-tighter mb-8 max-w-5xl leading-[0.9]">
-            Devenez propriétaire <br/><span className="text-[#ff6b35]">en un clic.</span>
+            L'immobilier rentable <br/><span className="text-[#ff6b35]">en un clic.</span>
           </h1>
           <p className="text-slate-400 text-xl font-medium max-w-xl mb-12 leading-relaxed">
-            Investissez dans l'immobilier tchadien dès 10.000 F CFA et recevez des dividendes mensuels.
+            Devenez copropriétaire d'actifs prestigieux au Tchad dès 10.000 F CFA.
           </p>
           <div className="flex flex-col md:flex-row gap-4 mb-20">
-            <button onClick={() => setView('app')} className="bg-[#0d1b2a] text-white px-12 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-2xl">Découvrir les actifs</button>
-            <button onClick={() => { setView('app'); setActiveTab('simulator'); }} className="bg-white text-[#0d1b2a] border border-slate-200 px-12 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">Simuler mes revenus</button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl w-full">
-            {[
-              { t: "12% / AN", d: "Rendement ciblé" },
-              { t: "100% DIGITAL", d: "Gestion simplifiée" },
-              { t: "SÉCURISÉ", d: "Sous-jacent immobilier" },
-            ].map((f, i) => (
-              <div key={i} className="bg-white p-10 rounded-3xl border border-slate-100 bricks-shadow">
-                <p className="text-3xl font-black text-[#0d1b2a] mb-2">{f.t}</p>
-                <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em]">{f.d}</p>
-              </div>
-            ))}
+            <button onClick={() => setView('app')} className="bg-[#0d1b2a] text-white px-12 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-2xl">Explorer le catalogue</button>
+            <button onClick={() => { setView('app'); setActiveTab('simulator'); }} className="bg-white text-[#0d1b2a] border border-slate-200 px-12 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">Calculer mes dividendes</button>
           </div>
         </div>
 
         <footer className="py-12 border-t text-center bg-white">
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">© 2024 GESS INVEST TCHAD • N'DJAMENA • SÉCURISÉ PAR SUPABASE</p>
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">© 2024 GESS INVEST TCHAD • N'DJAMENA • GESTION IMMOBILIÈRE</p>
         </footer>
       </div>
     );
@@ -347,7 +330,7 @@ const App: React.FC = () => {
         {loading ? (
           <div className="flex flex-col items-center justify-center h-[60vh] gap-6">
             <div className="w-14 h-14 border-4 border-[#ff6b35]/20 border-t-[#ff6b35] rounded-full animate-spin"></div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">GESS-NET SECURE CONNECTION...</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chargement sécurisé...</p>
           </div>
         ) : (
           userRole === 'admin' ? renderAdminContent() : renderInvestorContent()
@@ -355,8 +338,8 @@ const App: React.FC = () => {
       </div>
 
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#0d1b2a]/95 backdrop-blur-md p-1.5 rounded-2xl shadow-2xl border border-white/10 z-[5000] flex gap-1">
-        <button onClick={() => { setUserRole('investor'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${userRole === 'investor' ? 'bg-[#ff6b35] text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Investisseur</button>
-        <button onClick={() => { setUserRole('admin'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${userRole === 'admin' ? 'bg-white text-[#0d1b2a] shadow-lg' : 'text-slate-400 hover:text-white'}`}>Admin GESS</button>
+        <button onClick={() => { setUserRole('investor'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${userRole === 'investor' ? 'bg-[#ff6b35] text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Côté Client</button>
+        <button onClick={() => { setUserRole('admin'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${userRole === 'admin' ? 'bg-white text-[#0d1b2a] shadow-lg' : 'text-slate-400 hover:text-white'}`}>Côté GESS</button>
       </div>
     </Layout>
   );
