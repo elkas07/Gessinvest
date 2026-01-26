@@ -3,12 +3,10 @@ import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import DataTable from './components/DataTable';
 import { Project, UserProfile, Transaction, UserRole } from './types';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { supabase } from './lib/supabase';
 
 const formatCFA = (val: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(val).replace('XOF', 'F CFA');
 
-// Composant Badge style Bricks
 const Badge = ({ status }: { status: string }) => {
   const styles: Record<string, string> = {
     'Validé': 'bg-green-50 text-green-700 border-green-100',
@@ -16,10 +14,11 @@ const Badge = ({ status }: { status: string }) => {
     'Rejeté': 'bg-red-50 text-red-700 border-red-100',
     'verified': 'bg-blue-50 text-blue-700 border-blue-100',
     'pending': 'bg-amber-50 text-amber-700 border-amber-100',
+    'active': 'bg-emerald-50 text-emerald-700 border-emerald-100',
   };
   return (
-    <span className={`px-3 py-1 rounded-full text-[10px] font-bold border uppercase tracking-tight ${styles[status] || 'bg-gray-50 text-gray-500'}`}>
-      {status === 'verified' ? 'Vérifié' : status === 'pending' ? 'En attente' : status}
+    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-tight ${styles[status] || 'bg-gray-50 text-gray-500'}`}>
+      {status === 'verified' ? 'Vérifié' : status === 'pending' ? 'Attente' : status}
     </span>
   );
 };
@@ -35,10 +34,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
 
-  // Simulation gains
   const [simAmount, setSimAmount] = useState(1000000);
-
-  // Modals Admin
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', target: 10000000, rate: 12, location: 'N\'Djamena' });
 
@@ -53,7 +49,15 @@ const App: React.FC = () => {
       const { data: prof } = await supabase.from('profiles').select('*');
       const { data: trans } = await supabase.from('transactions').select('*').order('date', { ascending: false });
 
-      if (proj) setProjects(proj);
+      if (proj) {
+        setProjects(proj.map(p => ({
+          ...p,
+          targetAmount: p.target_amount || p.targetAmount,
+          collectedAmount: p.collected_amount || p.collectedAmount,
+          returnRate: p.return_rate || p.returnRate,
+          imageUrl: p.image_url || p.imageUrl
+        })));
+      }
       if (prof) {
         setAllUsers(prof);
         setCurrentUser(prof[0] || null);
@@ -86,66 +90,61 @@ const App: React.FC = () => {
     fetchData();
   };
 
-  // --- RENDU ADMIN (STYLE BRICKS) ---
   const renderAdminContent = () => {
     switch (activeTab) {
       case 'overview':
         return (
-          <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="space-y-6 animate-fade">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {[
-                { label: "Volume d'Investissement", val: formatCFA(projects.reduce((acc, p) => acc + (p.collectedAmount || 0), 0)), sub: "Collecté à ce jour" },
-                { label: "Membres GESS", val: allUsers.length, sub: "Inscrits sur la plateforme" },
-                { label: "Biens en ligne", val: projects.length, sub: "Opportunités actives" },
-                { label: "Alertes KYC", val: allUsers.filter(u => u.kycStatus === 'pending').length, sub: "Vérifications requises" },
+                { label: "Collecte Totale", val: formatCFA(projects.reduce((acc, p) => acc + (p.collectedAmount || 0), 0)) },
+                { label: "Investisseurs", val: allUsers.length },
+                { label: "Projets Actifs", val: projects.length },
+                { label: "KYC à valider", val: allUsers.filter(u => u.kycStatus === 'pending').length },
               ].map((s, i) => (
-                <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <div key={i} className="bg-white p-6 rounded-2xl border border-slate-100 bricks-shadow">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{s.label}</p>
-                  <p className="text-2xl font-black text-slate-900">{s.val}</p>
-                  <p className="text-[10px] text-slate-400 mt-2">{s.sub}</p>
+                  <p className="text-xl font-black text-slate-900">{s.val}</p>
                 </div>
               ))}
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-               <DataTable title="Dernières Activités" data={transactions} columns={[
-                 { header: 'Utilisateur', render: (t) => <span className="font-semibold">{t.userName || 'Investisseur'}</span> },
-                 { header: 'Montant', render: (t) => <span className="font-bold">{formatCFA(t.amount)}</span> },
-                 { header: 'Date', render: (t) => <span className="text-slate-500 text-sm">{new Date(t.date).toLocaleDateString()}</span> },
-                 { header: 'Statut', render: (t) => <Badge status={t.status} /> }
-               ]} />
-            </div>
+            <DataTable title="Dernières Transactions" data={transactions} columns={[
+              { header: 'Utilisateur', render: (t) => <span className="font-bold text-sm text-slate-700">{t.userName || 'Investisseur'}</span> },
+              { header: 'Montant', render: (t) => <span className="font-bold text-sm text-[#ff6b35]">{formatCFA(t.amount)}</span> },
+              { header: 'Date', render: (t) => <span className="text-slate-400 text-xs">{new Date(t.date).toLocaleDateString()}</span> },
+              { header: 'Statut', render: (t) => <Badge status={t.status} /> }
+            ]} />
           </div>
         );
       case 'projects':
         return (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-fade">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-slate-900">Gestion des Biens</h2>
-              <button onClick={() => setShowProjectModal(true)} className="bg-[#ff6b35] text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-[#e85a2a] transition-colors shadow-lg shadow-orange-500/20">Ajouter un bien</button>
+              <h2 className="text-xl font-bold text-slate-900">Gestion Immobilière</h2>
+              <button onClick={() => setShowProjectModal(true)} className="bg-[#ff6b35] text-white px-6 py-2.5 rounded-xl font-bold text-xs bricks-button-shadow transition-transform hover:scale-105">Nouveau Projet</button>
             </div>
             <DataTable data={projects} columns={[
-              { header: 'Nom du Projet', render: (p) => <div className="font-bold">{p.name}</div> },
-              { header: 'Localisation', render: (p) => <div className="text-slate-500">{p.location}</div> },
-              { header: 'Objectif', render: (p) => <span className="font-semibold">{formatCFA(p.targetAmount)}</span> },
-              { header: 'Collecté', render: (p) => <div className="text-orange-600 font-bold">{Math.round((p.collectedAmount/p.targetAmount)*100)}%</div> },
-              { header: 'Action', render: (p) => (
-                <button onClick={async () => { if(confirm('Supprimer ce projet ?')) { await supabase.from('projects').delete().eq('id', p.id); fetchData(); } }} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase underline">Supprimer</button>
+              { header: 'Bien', render: (p) => <div className="font-bold text-sm">{p.name}</div> },
+              { header: 'Lieu', render: (p) => <div className="text-slate-500 text-sm">{p.location}</div> },
+              { header: 'Objectif', render: (p) => <span className="font-semibold text-sm">{formatCFA(p.targetAmount)}</span> },
+              { header: 'Progression', render: (p) => <div className="text-[#ff6b35] font-black text-sm">{Math.round(((p.collectedAmount || 0)/p.targetAmount)*100)}%</div> },
+              { header: 'Actions', render: (p) => (
+                <button onClick={async () => { if(confirm('Supprimer ce projet ?')) { await supabase.from('projects').delete().eq('id', p.id); fetchData(); } }} className="text-red-500 font-bold text-[10px] uppercase hover:underline">Supprimer</button>
               )}
             ]} />
-
             {showProjectModal && (
-              <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[3000] flex items-center justify-center p-6">
-                <div className="bg-white w-full max-w-md rounded-3xl p-10 shadow-2xl animate-in zoom-in-95">
-                   <h3 className="text-2xl font-bold mb-6">Nouveau Bien Immobilier</h3>
-                   <div className="space-y-5">
-                     <input value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 outline-none focus:border-orange-500" placeholder="Nom du projet" />
+              <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-6">
+                <div className="bg-white w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-fade">
+                   <h3 className="text-xl font-bold mb-6">Ajouter un actif</h3>
+                   <div className="space-y-4">
+                     <input value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm outline-none focus:border-[#ff6b35]" placeholder="Nom de l'immeuble" />
                      <div className="grid grid-cols-2 gap-4">
-                        <input type="number" value={newProject.target} onChange={e => setNewProject({...newProject, target: parseInt(e.target.value)})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 outline-none" placeholder="Objectif CFA" />
-                        <input type="number" value={newProject.rate} onChange={e => setNewProject({...newProject, rate: parseInt(e.target.value)})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 outline-none" placeholder="ROI %" />
+                        <input type="number" value={newProject.target} onChange={e => setNewProject({...newProject, target: parseInt(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm outline-none" placeholder="CFA" />
+                        <input type="number" value={newProject.rate} onChange={e => setNewProject({...newProject, rate: parseInt(e.target.value)})} className="w-full bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm outline-none" placeholder="ROI %" />
                      </div>
-                     <div className="flex gap-4 mt-6">
-                       <button onClick={() => setShowProjectModal(false)} className="flex-1 py-3 text-slate-500 font-bold text-sm">Annuler</button>
-                       <button onClick={handleCreateProject} className="flex-2 bg-[#ff6b35] text-white px-8 py-3 rounded-xl font-bold text-sm">Publier le bien</button>
+                     <div className="flex gap-4 pt-4">
+                       <button onClick={() => setShowProjectModal(false)} className="flex-1 py-3 text-slate-400 font-bold text-xs uppercase">Annuler</button>
+                       <button onClick={handleCreateProject} className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase">Publier</button>
                      </div>
                    </div>
                 </div>
@@ -155,18 +154,15 @@ const App: React.FC = () => {
         );
       case 'kyc':
         return (
-          <div className="space-y-6">
-             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-               <h3 className="text-lg font-bold">Validation des Identités</h3>
-               <p className="text-slate-400 text-sm">Vérifiez les documents pour activer les retraits.</p>
-             </div>
-             <DataTable data={allUsers.filter(u => u.kycStatus === 'pending' || u.kycStatus === 'verified')} columns={[
-               { header: 'Utilisateur', render: (u) => <div className="font-bold">{u.name}</div> },
+          <div className="space-y-6 animate-fade">
+             <DataTable title="Vérification des Comptes" data={allUsers.filter(u => u.kycStatus === 'pending' || u.kycStatus === 'verified')} columns={[
+               { header: 'Utilisateur', render: (u) => <div className="font-bold text-sm">{u.name}</div> },
+               { header: 'E-mail', render: (u) => <div className="text-slate-400 text-xs">{u.email}</div> },
                { header: 'Statut', render: (u) => <Badge status={u.kycStatus} /> },
-               { header: 'Actions', render: (u) => (
-                 <div className="flex gap-3">
-                   <button onClick={() => handleVerifyKYC(u.id, 'verified')} className="bg-green-600 text-white px-4 py-2 rounded-lg text-[10px] font-bold uppercase">Approuver</button>
-                   <button onClick={() => handleVerifyKYC(u.id, 'rejected')} className="bg-red-500 text-white px-4 py-2 rounded-lg text-[10px] font-bold uppercase">Rejeter</button>
+               { header: 'Décision', render: (u) => (
+                 <div className="flex gap-2">
+                   <button onClick={() => handleVerifyKYC(u.id, 'verified')} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase">Valider</button>
+                   <button onClick={() => handleVerifyKYC(u.id, 'rejected')} className="bg-rose-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase">Rejeter</button>
                  </div>
                )}
              ]} />
@@ -176,42 +172,36 @@ const App: React.FC = () => {
     }
   };
 
-  // --- RENDU INVESTISSEUR (STYLE BRICKS) ---
   const renderInvestorContent = () => {
     switch (activeTab) {
       case 'overview':
         return (
-          <div className="space-y-8 animate-in fade-in">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 bg-slate-900 rounded-[2.5rem] p-12 text-white shadow-2xl relative overflow-hidden">
-                <div className="relative z-10 flex flex-col h-full justify-between">
-                  <div>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">Valeur totale du portefeuille</p>
-                    <h2 className="text-6xl font-black tracking-tighter">{formatCFA(currentUser?.balance || 0)}</h2>
-                    <div className="mt-6 flex items-center gap-2">
-                       <Badge status={currentUser?.kycStatus === 'verified' ? 'Compte Vérifié' : 'Identité à confirmer'} />
-                    </div>
-                  </div>
-                  <div className="mt-12 flex gap-4">
-                    <button className="bg-[#ff6b35] text-white px-10 py-4 rounded-xl font-bold text-sm hover:scale-105 transition-all">Approvisionner</button>
-                    <button className="bg-white/10 text-white px-10 py-4 rounded-xl font-bold text-sm border border-white/10">Retirer</button>
+          <div className="space-y-8 animate-fade">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 bg-[#0d1b2a] rounded-[2rem] p-10 text-white relative overflow-hidden bricks-shadow">
+                <div className="relative z-10">
+                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">Valeur de votre portefeuille</p>
+                  <h2 className="text-6xl font-black tracking-tighter">{formatCFA(currentUser?.balance || 0)}</h2>
+                  <div className="mt-8 flex gap-3">
+                    <button className="bg-[#ff6b35] text-white px-8 py-3.5 rounded-xl font-bold text-xs bricks-button-shadow hover:scale-105 transition-all">Approvisionner</button>
+                    <button className="bg-white/10 text-white px-8 py-3.5 rounded-xl font-bold text-xs border border-white/5 hover:bg-white/20">Retirer</button>
                   </div>
                 </div>
-                <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/20 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-[#ff6b35]/10 rounded-full blur-[100px] -mr-32 -mt-32"></div>
               </div>
-              <div className="bg-white rounded-[2.5rem] p-10 border border-slate-200 shadow-sm flex flex-col justify-between">
+              <div className="bg-white rounded-[2rem] p-8 border border-slate-100 bricks-shadow flex flex-col justify-between">
                 <div>
-                  <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Revenus versés</p>
-                  <h3 className="text-4xl font-black text-green-600 tracking-tighter">{formatCFA((currentUser?.totalInvested || 0) * 0.12)}</h3>
+                  <p className="text-slate-400 text-[10px] font-bold uppercase mb-1">Dividendes versés</p>
+                  <h3 className="text-4xl font-black text-emerald-600">{formatCFA((currentUser?.totalInvested || 0) * 0.12)}</h3>
                 </div>
-                <div className="pt-8 border-t border-slate-100 space-y-4">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400 font-bold uppercase">Rendement Annuel</span>
-                    <span className="font-bold">12-15%</span>
+                <div className="pt-6 border-t border-slate-50 space-y-3">
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase">
+                    <span>Performance GESS</span>
+                    <span className="text-slate-900">+12.4% / an</span>
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400 font-bold uppercase">Prochain versement</span>
-                    <span className="font-bold text-orange-600">01 du mois</span>
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase">
+                    <span>Identité</span>
+                    <Badge status={currentUser?.kycStatus || 'pending'} />
                   </div>
                 </div>
               </div>
@@ -220,26 +210,26 @@ const App: React.FC = () => {
         );
       case 'investments':
         return (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-fade">
             {projects.map(p => (
-              <div key={p.id} className="bg-white rounded-3xl overflow-hidden border border-slate-200 hover:shadow-xl transition-all group">
-                <div className="h-64 relative overflow-hidden">
+              <div key={p.id} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 hover:shadow-2xl transition-all group bricks-shadow">
+                <div className="h-56 relative overflow-hidden">
                   <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={p.name} />
-                  <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-bold uppercase shadow-sm">{p.location}</div>
-                  <div className="absolute bottom-4 right-4 bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg">{p.returnRate}% / AN</div>
+                  <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-bold uppercase text-slate-900">{p.location}</div>
+                  <div className="absolute bottom-4 right-4 bg-[#ff6b35] text-white px-4 py-2 rounded-xl text-[11px] font-black shadow-lg">{p.returnRate}% / AN</div>
                 </div>
                 <div className="p-8 space-y-6">
-                  <h4 className="text-xl font-bold text-slate-900">{p.name}</h4>
+                  <h4 className="text-xl font-bold text-slate-900 leading-tight">{p.name}</h4>
                   <div className="space-y-3">
-                    <div className="flex justify-between text-[11px] font-bold uppercase text-slate-400">
-                      <span>Financé</span>
-                      <span className="text-slate-900">{Math.round((p.collectedAmount/p.targetAmount)*100)}%</span>
+                    <div className="flex justify-between text-[10px] font-bold uppercase text-slate-400">
+                      <span>Collecte</span>
+                      <span className="text-slate-900 font-black">{Math.round(((p.collectedAmount || 0)/p.targetAmount)*100)}%</span>
                     </div>
-                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-orange-500 rounded-full" style={{ width: `${(p.collectedAmount/p.targetAmount)*100}%` }}></div>
+                    <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#ff6b35] rounded-full transition-all duration-1000" style={{ width: `${((p.collectedAmount || 0)/p.targetAmount)*100}%` }}></div>
                     </div>
                   </div>
-                  <button className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-[#ff6b35] transition-colors shadow-lg shadow-slate-900/10">Détails de l'actif</button>
+                  <button className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-[11px] uppercase tracking-widest hover:bg-[#ff6b35] transition-colors bricks-button-shadow">Investir maintenant</button>
                 </div>
               </div>
             ))}
@@ -247,47 +237,51 @@ const App: React.FC = () => {
         );
       case 'simulator':
         return (
-          <div className="max-w-4xl mx-auto space-y-8 animate-in zoom-in-95">
-            <div className="bg-white p-16 rounded-[3rem] shadow-xl border border-slate-100 flex flex-col md:flex-row gap-16">
-              <div className="flex-1 space-y-12">
-                <h3 className="text-4xl font-bold text-slate-900">Simulateur de revenus</h3>
-                <div className="space-y-6">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Montant de votre investissement</label>
-                  <input type="range" min="10000" max="10000000" step="10000" value={simAmount} onChange={(e) => setSimAmount(parseInt(e.target.value))} className="w-full h-2 bg-slate-100 rounded-full appearance-none accent-orange-500" />
-                  <div className="text-3xl font-black text-slate-900">{formatCFA(simAmount)}</div>
+          <div className="max-w-xl mx-auto space-y-8 animate-fade py-10">
+            <div className="bg-white p-12 rounded-[2.5rem] border border-slate-100 bricks-shadow flex flex-col gap-10">
+              <div className="space-y-8">
+                <h3 className="text-3xl font-black text-slate-900 tracking-tighter">Votre futur avec GESS</h3>
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Montant à investir</label>
+                  <input type="range" min="10000" max="10000000" step="10000" value={simAmount} onChange={(e) => setSimAmount(parseInt(e.target.value))} className="w-full h-2 bg-slate-100 rounded-full appearance-none accent-[#ff6b35] cursor-pointer" />
+                  <div className="text-4xl font-black text-slate-900 tracking-tighter">{formatCFA(simAmount)}</div>
                 </div>
               </div>
-              <div className="w-full md:w-80 bg-slate-50 p-10 rounded-3xl border border-slate-100 text-center space-y-6">
-                <p className="text-xs font-bold text-slate-400 uppercase">Revenu Mensuel Estimé</p>
-                <div className="text-5xl font-black text-orange-600">{formatCFA(simAmount * 0.12 / 12)}</div>
-                <div className="h-px bg-slate-200"></div>
-                <p className="text-xs font-bold text-slate-400 uppercase">Revenu Annuel</p>
-                <p className="text-2xl font-black text-green-600">{formatCFA(simAmount * 0.12)}</p>
+              <div className="bg-slate-50 p-8 rounded-3xl text-center space-y-6">
+                <div>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Revenus passifs par mois</p>
+                   <div className="text-5xl font-black text-[#ff6b35] tracking-tighter">{formatCFA(simAmount * 0.12 / 12)}</div>
+                </div>
+                <div className="pt-6 border-t border-slate-200">
+                   <p className="text-xs font-bold text-slate-500 uppercase">Soit <span className="text-emerald-600 font-black">{formatCFA(simAmount * 0.12)}</span> par an</p>
+                </div>
               </div>
             </div>
           </div>
         );
       case 'profil':
         return (
-          <div className="max-w-3xl mx-auto space-y-8">
-             <div className="bg-white p-10 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-10">
-                <div className="w-32 h-32 bg-slate-100 rounded-3xl border-4 border-white shadow-lg overflow-hidden">
-                  <img src={`https://api.dicebear.com/7.x/initials/svg?seed=${currentUser?.name}&backgroundColor=0d1b2a`} className="w-full h-full object-cover" />
+          <div className="max-w-md mx-auto space-y-6 animate-fade py-10">
+             <div className="bg-white p-10 rounded-[2rem] border border-slate-100 bricks-shadow flex items-center gap-8">
+                <div className="w-24 h-24 bg-[#0d1b2a] rounded-3xl border-4 border-white shadow-xl overflow-hidden shrink-0">
+                  <img src={`https://api.dicebear.com/7.x/initials/svg?seed=${currentUser?.name}`} className="w-full h-full object-cover" />
                 </div>
-                <div>
-                   <h2 className="text-3xl font-bold text-slate-900">{currentUser?.name}</h2>
-                   <p className="text-slate-400 text-sm mb-4">{currentUser?.email}</p>
+                <div className="min-w-0">
+                   <h2 className="text-2xl font-bold text-slate-900 truncate">{currentUser?.name}</h2>
+                   <p className="text-slate-400 text-xs mb-4 truncate">{currentUser?.email}</p>
                    <Badge status={currentUser?.kycStatus || 'pending'} />
                 </div>
              </div>
-             <div className="bg-white p-10 rounded-3xl border border-slate-100 space-y-6">
-                <h4 className="text-sm font-bold uppercase tracking-widest text-slate-400">Vérification du compte</h4>
-                <div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex justify-between items-center group cursor-pointer hover:border-orange-300 transition-colors">
+             <div className="bg-white p-10 rounded-[2rem] border border-slate-100 bricks-shadow space-y-6">
+                <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Documents officiels</h4>
+                <div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex justify-between items-center group cursor-pointer hover:border-[#ff6b35] transition-all">
                   <div className="flex flex-col">
-                    <span className="font-bold text-slate-700">Pièce d'identité</span>
-                    <span className="text-[10px] text-slate-400">Carte NNI ou Passeport</span>
+                    <span className="text-sm font-bold text-slate-800">Pièce d'identité</span>
+                    <span className="text-[9px] text-slate-400 uppercase font-black">NNI ou PASSEPORT</span>
                   </div>
-                  <button className="bg-slate-900 text-white p-2 rounded-lg group-hover:bg-orange-500"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg></button>
+                  <div className="bg-slate-900 text-white p-3 rounded-xl group-hover:bg-[#ff6b35] transition-colors">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                  </div>
                 </div>
              </div>
           </div>
@@ -299,47 +293,44 @@ const App: React.FC = () => {
   if (view === 'landing') {
     return (
       <div className="min-h-screen bg-white flex flex-col">
-        {/* Header Landing Style Bricks */}
-        <nav className="h-20 border-b flex items-center justify-between px-12 bg-white sticky top-0 z-50">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-[#ff6b35] rounded-xl flex items-center justify-center font-black text-white text-xl">G</div>
-            <span className="text-xl font-bold tracking-tight">GESS <span className="text-[#ff6b35]">INVEST</span></span>
+        <nav className="h-20 border-b flex items-center justify-between px-8 md:px-16 bg-white sticky top-0 z-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#ff6b35] rounded-xl flex items-center justify-center font-black text-white text-xl bricks-button-shadow">G</div>
+            <span className="text-xl font-black tracking-tight text-[#0d1b2a]">GESS <span className="text-[#ff6b35]">INVEST</span></span>
           </div>
-          <div className="flex gap-6">
-            <button onClick={() => setView('app')} className="text-sm font-bold text-slate-600 hover:text-slate-900">Se connecter</button>
-            <button onClick={() => setView('app')} className="bg-[#ff6b35] text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg shadow-orange-500/20 hover:scale-105 transition-all">S'inscrire</button>
+          <div className="flex gap-6 items-center">
+            <button onClick={() => setView('app')} className="text-sm font-bold text-slate-500 hover:text-slate-900">Se connecter</button>
+            <button onClick={() => setView('app')} className="bg-[#ff6b35] text-white px-7 py-2.5 rounded-xl font-bold text-xs bricks-button-shadow hover:scale-105 transition-all uppercase">Ouvrir un compte</button>
           </div>
         </nav>
 
-        {/* Hero Section Style Bricks */}
-        <div className="flex-1 flex flex-col items-center justify-center px-10 text-center py-20 bg-slate-50">
-          <h1 className="text-6xl md:text-8xl font-black text-slate-900 tracking-tighter mb-8 max-w-5xl leading-none">
-            Investissez dans l'immobilier <span className="text-[#ff6b35]">dès 10 000 F.</span>
+        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center py-24 bg-[#fcfcfc]">
+          <h1 className="text-6xl md:text-8xl font-black text-[#0d1b2a] tracking-tighter mb-8 max-w-5xl leading-[0.9]">
+            Devenez propriétaire <br/><span className="text-[#ff6b35]">en un clic.</span>
           </h1>
-          <p className="text-slate-500 text-xl font-medium max-w-2xl mb-12">
-            La première plateforme tchadienne qui démocratise l'accès à la propriété rentable. Sécurisé, transparent, et 100% digital.
+          <p className="text-slate-400 text-xl font-medium max-w-xl mb-12 leading-relaxed">
+            Investissez dans l'immobilier tchadien dès 10.000 F CFA et recevez des dividendes mensuels.
           </p>
-          <div className="flex gap-6 mb-20">
-            <button onClick={() => setView('app')} className="bg-slate-900 text-white px-10 py-5 rounded-2xl font-bold text-sm uppercase tracking-widest shadow-2xl hover:bg-slate-800 transition-colors">Découvrir les biens</button>
-            <button onClick={() => { setView('app'); setActiveTab('simulator'); }} className="bg-white text-slate-900 border border-slate-200 px-10 py-5 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-slate-50 transition-colors shadow-sm">Simuler mes revenus</button>
+          <div className="flex flex-col md:flex-row gap-4 mb-20">
+            <button onClick={() => setView('app')} className="bg-[#0d1b2a] text-white px-12 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-2xl">Découvrir les actifs</button>
+            <button onClick={() => { setView('app'); setActiveTab('simulator'); }} className="bg-white text-[#0d1b2a] border border-slate-200 px-12 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">Simuler mes revenus</button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 max-w-6xl w-full">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl w-full">
             {[
-              { t: "12% à 15%", d: "Rendement annuel moyen" },
-              { t: "Sécurisé", d: "Actifs gérés par GESS" },
-              { t: "Flexible", d: "Retrait des dividendes mensuel" },
+              { t: "12% / AN", d: "Rendement ciblé" },
+              { t: "100% DIGITAL", d: "Gestion simplifiée" },
+              { t: "SÉCURISÉ", d: "Sous-jacent immobilier" },
             ].map((f, i) => (
-              <div key={i} className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm text-center">
-                <p className="text-3xl font-black text-slate-900 mb-2">{f.t}</p>
-                <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">{f.d}</p>
+              <div key={i} className="bg-white p-10 rounded-3xl border border-slate-100 bricks-shadow">
+                <p className="text-3xl font-black text-[#0d1b2a] mb-2">{f.t}</p>
+                <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em]">{f.d}</p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Footer simple */}
         <footer className="py-12 border-t text-center bg-white">
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">© 2024 GESS INVEST TCHAD - Tous droits réservés</p>
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">© 2024 GESS INVEST TCHAD • N'DJAMENA • SÉCURISÉ PAR SUPABASE</p>
         </footer>
       </div>
     );
@@ -355,18 +346,17 @@ const App: React.FC = () => {
       <div className="pb-32">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-[60vh] gap-6">
-            <div className="w-16 h-16 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin"></div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Accès sécurisé en cours...</p>
+            <div className="w-14 h-14 border-4 border-[#ff6b35]/20 border-t-[#ff6b35] rounded-full animate-spin"></div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">GESS-NET SECURE CONNECTION...</p>
           </div>
         ) : (
           userRole === 'admin' ? renderAdminContent() : renderInvestorContent()
         )}
       </div>
 
-      {/* Switcher de rôle (Simulé pour la démo) */}
-      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-xl border border-slate-100 z-[4000] flex gap-2">
-        <button onClick={() => { setUserRole('investor'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${userRole === 'investor' ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-900'}`}>Investisseur</button>
-        <button onClick={() => { setUserRole('admin'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${userRole === 'admin' ? 'bg-orange-500 text-white' : 'text-slate-400 hover:text-orange-500'}`}>Gérant GESS</button>
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#0d1b2a]/95 backdrop-blur-md p-1.5 rounded-2xl shadow-2xl border border-white/10 z-[5000] flex gap-1">
+        <button onClick={() => { setUserRole('investor'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${userRole === 'investor' ? 'bg-[#ff6b35] text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Investisseur</button>
+        <button onClick={() => { setUserRole('admin'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${userRole === 'admin' ? 'bg-white text-[#0d1b2a] shadow-lg' : 'text-slate-400 hover:text-white'}`}>Admin GESS</button>
       </div>
     </Layout>
   );
