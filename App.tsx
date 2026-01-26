@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import DataTable from './components/DataTable';
 import { Project, UserProfile, Transaction, UserRole } from './types';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { supabase } from './lib/supabase';
 
 const formatCFA = (val: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(val).replace('XOF', 'F CFA');
@@ -14,12 +14,10 @@ const Badge = ({ status }: { status: string }) => {
     'En attente': 'bg-amber-100 text-amber-700',
     'Rejeté': 'bg-red-100 text-red-700',
     'Terminé': 'bg-slate-100 text-slate-700',
-    'active': 'bg-emerald-100 text-emerald-700',
-    'verified': 'bg-blue-100 text-blue-700',
-    'pending': 'bg-amber-100 text-amber-700',
-    'rejected': 'bg-red-500 text-white',
+    'verified': 'bg-blue-100 text-blue-700 border border-blue-200',
+    'pending': 'bg-amber-50 text-amber-600 border border-amber-100',
   };
-  return <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${styles[status] || styles['En attente']}`}>{status}</span>;
+  return <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${styles[status] || 'bg-slate-100 text-slate-500'}`}>{status}</span>;
 };
 
 const App: React.FC = () => {
@@ -32,6 +30,10 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+
+  // Modals & Forms
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [newProject, setNewProject] = useState({ name: '', target: 10000000, rate: 15, location: 'N\'Djamena' });
 
   useEffect(() => {
     fetchData();
@@ -51,21 +53,24 @@ const App: React.FC = () => {
       }
       if (trans) setTransactions(trans);
     } catch (e) {
-      console.error("Erreur de chargement", e);
+      console.error("Erreur de synchronisation", e);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteProject = async (id: string) => {
-    if (window.confirm("Voulez-vous vraiment supprimer ce projet ? Cette action est irréversible.")) {
-      await supabase.from('projects').delete().eq('id', id);
-      fetchData();
-    }
-  };
-
-  const handleVerifyKYC = async (userId: string, status: 'verified' | 'rejected') => {
-    await supabase.from('profiles').update({ kycStatus: status }).eq('id', userId);
+  const handleCreateProject = async () => {
+    const projectData = {
+      name: newProject.name,
+      target_amount: newProject.target,
+      return_rate: newProject.rate,
+      location: newProject.location,
+      status: 'active',
+      collected_amount: 0,
+      image_url: 'https://images.unsplash.com/photo-1582407947304-fd86f028f716?q=80&w=800'
+    };
+    await supabase.from('projects').insert([projectData]);
+    setShowProjectModal(false);
     fetchData();
   };
 
@@ -74,40 +79,40 @@ const App: React.FC = () => {
     switch (activeTab) {
       case 'overview':
         return (
-          <div className="space-y-10 animate-in fade-in duration-500">
+          <div className="space-y-10 animate-in fade-in duration-700">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               {[
-                { label: "Collecte Totale", val: formatCFA(154200000), color: "text-slate-900" },
-                { label: "Nouveaux Membres", val: allUsers.length, color: "text-blue-600" },
-                { label: "ROI à verser", val: formatCFA(12500000), color: "text-[#ff6b35]" },
-                { label: "KYC en attente", val: allUsers.filter(u => u.kycStatus === 'pending').length, color: "text-amber-600" },
+                { label: "Collecte Globale", val: formatCFA(projects.reduce((acc, p) => acc + (p.collectedAmount || 0), 0)), color: "text-[#ff6b35]" },
+                { label: "Membres Actifs", val: allUsers.length, color: "text-slate-900" },
+                { label: "Projets en cours", val: projects.length, color: "text-emerald-600" },
+                { label: "KYC à valider", val: allUsers.filter(u => u.kycStatus === 'pending').length, color: "text-amber-500" },
               ].map((s, i) => (
-                <div key={i} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-xl transition-all">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">{s.label}</p>
-                  <p className={`text-3xl font-black ${s.color} tracking-tighter`}>{s.val}</p>
+                <div key={i} className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">{s.label}</p>
+                  <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <DataTable title="Derniers Mouvements" data={transactions} columns={[
-                { header: 'Utilisateur', render: (t) => <span className="font-bold">{t.userName || 'Investisseur'}</span> },
-                { header: 'Projet', render: (t) => <span className="text-xs">{t.projectName}</span> },
-                { header: 'Montant', render: (t) => <span className="font-black text-slate-900">{formatCFA(t.amount)}</span> },
-                { header: 'Statut', render: (t) => <Badge status={t.status} /> }
-              ]} />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2">
+                <DataTable title="Dernières Transactions" data={transactions} columns={[
+                  { header: 'Utilisateur', render: (t) => <span className="font-bold">{t.userName || 'Anonyme'}</span> },
+                  { header: 'Type', render: (t) => <span className="text-xs font-bold uppercase">{t.type}</span> },
+                  { header: 'Montant', render: (t) => <span className="font-black text-slate-900">{formatCFA(t.amount)}</span> },
+                  { header: 'Statut', render: (t) => <Badge status={t.status} /> }
+                ]} />
+              </div>
               <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-                <h3 className="text-xl font-black uppercase mb-6 tracking-tighter">Performance GESS</h3>
-                <div className="h-64">
+                <h3 className="text-lg font-black uppercase mb-6 tracking-tighter">Répartition de l'épargne</h3>
+                <div className="h-64 flex items-center justify-center">
                    <ResponsiveContainer width="100%" height="100%">
-                     <AreaChart data={[{n:1, v:200}, {n:2, v:450}, {n:3, v:400}, {n:4, v:800}, {n:5, v:750}, {n:6, v:1200}]}>
-                       <defs>
-                        <linearGradient id="colorV" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ff6b35" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#ff6b35" stopOpacity={0}/>
-                        </linearGradient>
-                       </defs>
-                       <Area type="monotone" dataKey="v" stroke="#ff6b35" fillOpacity={1} fill="url(#colorV)" strokeWidth={4} />
-                     </AreaChart>
+                     <PieChart>
+                       <Pie data={[{n:'Immo',v:70}, {n:'Land',v:30}]} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="v">
+                         <Cell fill="#ff6b35" />
+                         <Cell fill="#0d1b2a" />
+                       </Pie>
+                       <Tooltip />
+                     </PieChart>
                    </ResponsiveContainer>
                 </div>
               </div>
@@ -116,33 +121,70 @@ const App: React.FC = () => {
         );
       case 'projects':
         return (
-          <div className="animate-in slide-in-from-bottom-10">
-            <DataTable title="Gestion des Actifs" data={projects} columns={[
-              { header: 'Nom du projet', render: (p) => <div className="font-black text-slate-900">{p.name}</div> },
-              { header: 'Objectif', render: (p) => <span className="font-bold">{formatCFA(p.targetAmount)}</span> },
-              { header: 'ROI', render: (p) => <span className="text-emerald-600 font-black">{p.returnRate}%</span> },
+          <div className="space-y-6">
+            <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100">
+              <h2 className="text-xl font-black uppercase tracking-tight">Portefeuille Immobilier</h2>
+              <button onClick={() => setShowProjectModal(true)} className="bg-[#ff6b35] text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-[#ff6b35]/20">+ Nouveau Projet</button>
+            </div>
+            <DataTable data={projects} columns={[
+              { header: 'Projet', render: (p) => <div className="font-bold">{p.name}</div> },
+              { header: 'Objectif', render: (p) => formatCFA(p.targetAmount) },
+              { header: 'Collecté', render: (p) => <div className="text-emerald-600 font-bold">{Math.round((p.collectedAmount/p.targetAmount)*100)}%</div> },
               { header: 'Actions', render: (p) => (
                 <div className="flex gap-4">
-                  <button className="text-blue-500 font-black text-[10px] uppercase hover:underline">Modifier</button>
-                  <button onClick={() => handleDeleteProject(p.id)} className="text-red-500 font-black text-[10px] uppercase hover:underline">Supprimer</button>
+                  <button className="text-blue-500 font-black text-[10px] uppercase underline">Éditer</button>
+                  <button onClick={async () => { if(confirm('Sûr ?')) { await supabase.from('projects').delete().eq('id', p.id); fetchData(); } }} className="text-red-500 font-black text-[10px] uppercase underline">Supprimer</button>
                 </div>
               )}
             ]} />
+
+            {showProjectModal && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[3000] flex items-center justify-center p-6">
+                <div className="bg-white w-full max-w-md rounded-[3rem] p-12 shadow-2xl animate-in zoom-in-95 duration-300">
+                   <h3 className="text-2xl font-black uppercase tracking-tighter mb-8">Lancer un projet</h3>
+                   <div className="space-y-6">
+                     <div>
+                       <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Nom du bâtiment</label>
+                       <input value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} className="w-full bg-slate-50 border-0 rounded-2xl p-4 font-bold focus:ring-2 ring-[#ff6b35]" placeholder="Ex: Résidence GESS I" />
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Objectif (CFA)</label>
+                          <input type="number" value={newProject.target} onChange={e => setNewProject({...newProject, target: parseInt(e.target.value)})} className="w-full bg-slate-50 border-0 rounded-2xl p-4 font-bold" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">ROI (%)</label>
+                          <input type="number" value={newProject.rate} onChange={e => setNewProject({...newProject, rate: parseInt(e.target.value)})} className="w-full bg-slate-50 border-0 rounded-2xl p-4 font-bold" />
+                        </div>
+                     </div>
+                     <div className="flex gap-4 pt-6">
+                       <button onClick={() => setShowProjectModal(false)} className="flex-1 py-4 font-black text-[10px] uppercase text-slate-400">Annuler</button>
+                       <button onClick={handleCreateProject} className="flex-2 bg-[#0d1b2a] text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">Créer le projet</button>
+                     </div>
+                   </div>
+                </div>
+              </div>
+            )}
           </div>
         );
       case 'kyc':
         return (
-          <DataTable title="Vérification KYC" data={allUsers.filter(u => u.kycStatus === 'pending')} columns={[
-            { header: 'Nom', render: (u) => <span className="font-bold">{u.name}</span> },
-            { header: 'Email', render: (u) => <span className="text-xs text-slate-50">{u.email}</span> },
-            { header: 'Document', render: () => <button className="text-blue-500 underline text-xs">Ouvrir CNI/Passeport</button> },
-            { header: 'Action', render: (u) => (
-              <div className="flex gap-2">
-                <button onClick={() => handleVerifyKYC(u.id, 'verified')} className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black uppercase shadow-lg">Valider</button>
-                <button onClick={() => handleVerifyKYC(u.id, 'rejected')} className="bg-red-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black uppercase shadow-lg">Rejeter</button>
-              </div>
-            )}
-          ]} />
+          <div className="space-y-6">
+             <div className="bg-amber-50 border border-amber-100 p-6 rounded-3xl text-amber-700 font-bold text-sm">
+               ⚠️ {allUsers.filter(u => u.kycStatus === 'pending').length} membres attendent une vérification d'identité.
+             </div>
+             <DataTable title="Vérification des Documents" data={allUsers} columns={[
+               { header: 'Utilisateur', render: (u) => <div className="font-bold">{u.name}</div> },
+               { header: 'Email', render: (u) => <div className="text-xs text-slate-400">{u.email}</div> },
+               { header: 'Document', render: () => <button className="text-blue-500 font-bold text-xs underline">Visualiser</button> },
+               { header: 'Action', render: (u) => (
+                 <div className="flex gap-2">
+                   <button className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black uppercase">Valider</button>
+                   <button className="bg-red-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black uppercase">Refuser</button>
+                 </div>
+               )}
+             ]} />
+          </div>
         );
       default: return null;
     }
@@ -159,29 +201,29 @@ const App: React.FC = () => {
                 <div className="absolute top-0 right-0 w-80 h-80 bg-[#ff6b35]/10 rounded-full blur-[100px] -mr-40 -mt-40 transition-all group-hover:bg-[#ff6b35]/20"></div>
                 <div className="relative z-10 flex flex-col justify-between h-full">
                   <div>
-                    <p className="text-[11px] font-black text-white/40 uppercase tracking-[0.4em] mb-4">Capital Disponible</p>
+                    <p className="text-[11px] font-black text-white/40 uppercase tracking-[0.4em] mb-4">Portefeuille Digital</p>
                     <h2 className="text-7xl font-black text-[#ff6b35] tracking-tighter mb-4">{formatCFA(currentUser?.balance || 0)}</h2>
-                    <Badge status={currentUser?.kycStatus === 'verified' ? 'Compte Vérifié' : 'Vérification requise'} />
+                    <Badge status={currentUser?.kycStatus === 'verified' ? 'verified' : 'pending'} />
                   </div>
                   <div className="flex gap-4 mt-12">
-                    <button className="flex-1 py-5 bg-[#ff6b35] rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl hover:scale-105 transition-all">Recharger</button>
-                    <button className="flex-1 py-5 bg-white/10 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-white/20 transition-all border border-white/5">Retirer</button>
+                    <button className="flex-1 py-5 bg-[#ff6b35] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl hover:scale-105 transition-all">Approvisionner</button>
+                    <button className="flex-1 py-5 bg-white/10 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-white/20 transition-all border border-white/5">Retrait</button>
                   </div>
                 </div>
               </div>
               <div className="w-full lg:w-96 bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-between">
                 <div>
-                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Revenus ROI Cumulés</p>
+                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Total des Profits ROI</p>
                   <h3 className="text-5xl font-black text-emerald-600 tracking-tighter">{formatCFA((currentUser?.totalInvested || 0) * 0.15)}</h3>
                 </div>
                 <div className="pt-8 border-t border-slate-50 mt-8 space-y-4">
                   <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
-                    <span>Total Investi</span>
-                    <span className="text-slate-900">{formatCFA(currentUser?.totalInvested || 0)}</span>
+                    <span>Capital Actif</span>
+                    <span className="text-slate-900 font-black">{formatCFA(currentUser?.totalInvested || 0)}</span>
                   </div>
                   <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
-                    <span>Part de marché</span>
-                    <span className="text-slate-900">0.02%</span>
+                    <span>Dividendes Prochains</span>
+                    <span className="text-emerald-500 font-black">+ {formatCFA((currentUser?.totalInvested || 0) * 0.0125)} / mois</span>
                   </div>
                 </div>
               </div>
@@ -202,50 +244,81 @@ const App: React.FC = () => {
                   <h4 className="text-2xl font-black text-[#0d1b2a] uppercase tracking-tighter">{p.name}</h4>
                   <div className="space-y-4">
                     <div className="flex justify-between text-[11px] font-black uppercase text-slate-400">
-                      <span>Progression</span>
-                      <span className="text-slate-900">{Math.round((p.collectedAmount/p.targetAmount)*100)}%</span>
+                      <span>Levée de fonds</span>
+                      <span className="text-slate-900 font-bold">{Math.round((p.collectedAmount/p.targetAmount)*100)}%</span>
                     </div>
-                    <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden p-0.5">
-                      <div className="h-full bg-[#ff6b35] rounded-full" style={{ width: `${(p.collectedAmount/p.targetAmount)*100}%` }}></div>
+                    <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-[#ff6b35] to-[#ff8e53]" style={{ width: `${(p.collectedAmount/p.targetAmount)*100}%` }}></div>
                     </div>
                   </div>
-                  <button className="w-full py-5 bg-[#0d1b2a] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl hover:bg-[#ff6b35] transition-all">S'associer au projet</button>
+                  <button className="w-full py-5 bg-[#0d1b2a] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl hover:bg-[#ff6b35] transition-all">Devenir Co-propriétaire</button>
                 </div>
               </div>
             ))}
           </div>
         );
+      case 'simulator':
+        return (
+          <div className="max-w-4xl mx-auto space-y-12">
+            <div className="bg-white p-16 rounded-[4rem] shadow-2xl border border-slate-100 flex flex-col md:flex-row gap-16 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-1/2 h-full bg-slate-50 skew-x-12 translate-x-20 z-0"></div>
+              <div className="flex-1 space-y-12 relative z-10">
+                <h3 className="text-4xl font-black text-[#0d1b2a] uppercase tracking-tighter">Votre Projection <br/><span className="text-[#ff6b35]">Financière</span></h3>
+                <div className="space-y-6">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Montant de l'investissement (CFA)</label>
+                  <input type="range" min="10000" max="10000000" step="10000" defaultValue="1000000" className="w-full h-3 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#ff6b35]" />
+                  <div className="text-4xl font-black text-[#0d1b2a]">1.000.000 F CFA</div>
+                </div>
+              </div>
+              <div className="w-full md:w-96 bg-[#0d1b2a] p-12 rounded-[3.5rem] shadow-xl text-white flex flex-col justify-center text-center space-y-6 relative z-10">
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Revenus mensuels estimés</p>
+                <div className="text-5xl font-black text-[#ff6b35] tracking-tighter">12.500 F</div>
+                <div className="h-px bg-white/10 w-full my-4"></div>
+                <p className="text-[11px] font-bold text-emerald-400">Rendement Annuel: 15%</p>
+              </div>
+            </div>
+          </div>
+        );
       case 'profil':
         return (
-          <div className="max-w-4xl mx-auto bg-white p-12 rounded-[4rem] shadow-xl border border-slate-100 space-y-12">
-             <div className="flex items-center gap-10">
-               <div className="w-32 h-32 bg-slate-100 rounded-[2.5rem] border-4 border-white shadow-xl overflow-hidden">
-                 <img src="https://picsum.photos/200/200?random=42" className="w-full h-full object-cover" />
-               </div>
-               <div>
-                 <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">{currentUser?.name}</h3>
-                 <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">{currentUser?.email}</p>
-                 <div className="mt-4"><Badge status={currentUser?.kycStatus || 'none'} /></div>
-               </div>
+          <div className="max-w-4xl mx-auto space-y-10">
+             <div className="bg-white p-12 rounded-[3.5rem] border border-slate-100 flex items-center gap-12">
+                <div className="w-32 h-32 bg-slate-100 rounded-[2.5rem] border-4 border-white shadow-xl overflow-hidden relative group">
+                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                    <span className="text-[9px] font-black text-white uppercase">Modifier</span>
+                  </div>
+                </div>
+                <div>
+                   <h2 className="text-3xl font-black uppercase tracking-tighter mb-2">{currentUser?.name}</h2>
+                   <p className="text-slate-400 font-bold uppercase text-xs tracking-widest mb-4">{currentUser?.email}</p>
+                   <Badge status={currentUser?.kycStatus || 'none'} />
+                </div>
              </div>
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-               <div className="p-8 bg-slate-50 rounded-[2.5rem] border-2 border-slate-100 space-y-6">
-                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vérification d'identité</h4>
-                 <div className="flex flex-col gap-4">
-                   <div className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center justify-between">
-                     <span className="text-sm font-bold">Pièce d'identité</span>
-                     <button className="text-[10px] font-black text-[#ff6b35] uppercase">Uploader</button>
-                   </div>
-                   <div className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center justify-between">
-                     <span className="text-sm font-bold">Justificatif de domicile</span>
-                     <button className="text-[10px] font-black text-[#ff6b35] uppercase">Uploader</button>
-                   </div>
-                 </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+               <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 space-y-8">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mes Documents KYC</h4>
+                  <div className="space-y-4">
+                     <div className="p-4 bg-slate-50 rounded-2xl flex items-center justify-between border border-dashed border-slate-200">
+                        <span className="text-xs font-bold text-slate-500">Pièce d'Identité</span>
+                        <button className="text-[#ff6b35] font-black text-[10px] uppercase">Uploader</button>
+                     </div>
+                     <div className="p-4 bg-slate-50 rounded-2xl flex items-center justify-between border border-dashed border-slate-200">
+                        <span className="text-xs font-bold text-slate-500">Photo Selfie</span>
+                        <button className="text-[#ff6b35] font-black text-[10px] uppercase">Prendre</button>
+                     </div>
+                  </div>
                </div>
-               <div className="p-8 bg-slate-50 rounded-[2.5rem] border-2 border-slate-100 space-y-6">
-                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sécurité</h4>
-                 <button className="w-full py-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[#0d1b2a] hover:text-white transition-all">Changer mon mot de passe</button>
-                 <button className="w-full py-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest text-red-500 border-red-100">Désactiver mon compte</button>
+               <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 space-y-8">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Coordonnées de Retrait</h4>
+                  <div className="p-5 bg-blue-50 border border-blue-100 rounded-3xl flex items-center gap-4">
+                     <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">🏦</div>
+                     <div className="flex-1">
+                        <p className="text-[10px] font-black uppercase text-blue-900">Banque / Mobile Money</p>
+                        <p className="text-xs font-bold text-blue-700">Non configuré</p>
+                     </div>
+                     <button className="text-[10px] font-black text-blue-900 uppercase underline">Ajouter</button>
+                  </div>
                </div>
              </div>
           </div>
@@ -263,10 +336,10 @@ const App: React.FC = () => {
           GESS <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ff6b35] to-white">INVEST</span>
         </h1>
         <p className="text-slate-400 font-bold text-2xl max-w-2xl mb-16 text-center leading-relaxed">
-          Le futur de l'immobilier tchadien commence ici. <br/>
-          <span className="text-white">Sécurisé. Rentable. Transparent.</span>
+          Propulsez votre patrimoine. <br/>
+          <span className="text-white">L'investissement immobilier premium au Tchad.</span>
         </p>
-        <button onClick={() => setView('app')} className="bg-[#ff6b35] text-white px-16 py-6 rounded-3xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-[#ff6b35]/20 hover:scale-110 transition-all">Lancer la plateforme</button>
+        <button onClick={() => setView('app')} className="bg-[#ff6b35] text-white px-16 py-6 rounded-3xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-[#ff6b35]/20 hover:scale-110 transition-all">Ouvrir mon dashboard</button>
       </div>
     );
   }
@@ -282,16 +355,16 @@ const App: React.FC = () => {
         {loading ? (
           <div className="flex flex-col items-center justify-center h-96 gap-6">
             <div className="w-16 h-16 border-4 border-[#ff6b35] border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Connexion GESS INVEST sécurisée...</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Chargement sécurisé GESS...</p>
           </div>
         ) : (
           userRole === 'admin' ? renderAdminContent() : renderInvestorContent()
         )}
       </div>
 
-      <div className="fixed bottom-10 left-10 bg-[#0d1b2a]/90 backdrop-blur-xl p-2 rounded-full shadow-3xl border border-white/10 z-[2000] flex">
-        <button onClick={() => { setUserRole('investor'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-full text-[10px] font-black uppercase transition-all tracking-widest ${userRole === 'investor' ? 'bg-[#ff6b35] text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>Investisseur</button>
-        <button onClick={() => { setUserRole('admin'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-full text-[10px] font-black uppercase transition-all tracking-widest ${userRole === 'admin' ? 'bg-[#ff6b35] text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>GESS Admin</button>
+      <div className="fixed bottom-10 left-10 bg-[#0d1b2a]/95 backdrop-blur-xl p-2 rounded-full shadow-3xl border border-white/10 z-[2000] flex">
+        <button onClick={() => { setUserRole('investor'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-full text-[10px] font-black uppercase transition-all tracking-widest ${userRole === 'investor' ? 'bg-[#ff6b35] text-white shadow-lg shadow-[#ff6b35]/20' : 'text-slate-500 hover:text-white'}`}>Investisseur</button>
+        <button onClick={() => { setUserRole('admin'); setActiveTab('overview'); }} className={`px-8 py-3 rounded-full text-[10px] font-black uppercase transition-all tracking-widest ${userRole === 'admin' ? 'bg-[#ff6b35] text-white shadow-lg shadow-[#ff6b35]/20' : 'text-slate-500 hover:text-white'}`}>Gérant GESS</button>
       </div>
     </Layout>
   );
