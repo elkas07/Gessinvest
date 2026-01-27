@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout.tsx';
 import DataTable from './components/DataTable.tsx';
@@ -33,6 +34,9 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
 
+  // UI States
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [simAmount, setSimAmount] = useState(500000);
   const [showBalanceModal, setShowBalanceModal] = useState<UserProfile | null>(null);
   const [balanceAdjustment, setBalanceAdjustment] = useState<number>(0);
@@ -100,6 +104,15 @@ const App: React.FC = () => {
       case 'overview':
         return (
           <div className="space-y-8 animate-fade">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-black tracking-tighter uppercase italic">Tableau de bord Admin</h2>
+              <button 
+                onClick={() => setShowAddProjectModal(true)}
+                className="bg-[#ff6b35] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-[#ff6b35]/20 hover:scale-105 transition-all"
+              >
+                + Ajouter un Projet
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               {[
                 { label: "Capitaux Collectés", val: formatCFA(projects.reduce((acc, p) => acc + (p.collectedAmount || 0), 0)) },
@@ -126,10 +139,13 @@ const App: React.FC = () => {
       case 'users':
         return (
           <div className="space-y-6 animate-fade">
-            <DataTable data={allUsers} columns={[
+            <DataTable 
+              title="Répertoire des Investisseurs"
+              data={allUsers} columns={[
               { header: 'Nom Complet', render: (u) => <div className="font-bold text-sm">{u.name}</div> },
+              { header: 'E-mail', render: (u) => <div className="text-slate-400 text-xs">{u.email}</div> },
               { header: 'Solde Client', render: (u) => <div className="font-black text-slate-900">{formatCFA(u.balance || 0)}</div> },
-              { header: 'Statut', render: (u) => <StatusBadge status={u.accountStatus || 'active'} /> },
+              { header: 'Investi', render: (u) => <div className="text-slate-500 font-bold">{formatCFA(u.totalInvested || 0)}</div> },
               { header: 'Actions', render: (u) => (
                 <button onClick={() => setShowBalanceModal(u)} className="bg-[#0d1b2a] text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#ff6b35] transition-all">Gérer Solde</button>
               )}
@@ -185,6 +201,83 @@ const App: React.FC = () => {
   };
 
   const renderInvestorContent = () => {
+    if (selectedProject) {
+      return (
+        <div className="animate-fade">
+          <button 
+            onClick={() => setSelectedProject(null)}
+            className="mb-8 flex items-center gap-2 text-slate-400 hover:text-slate-900 font-black text-xs uppercase tracking-widest transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            Retour au Marché
+          </button>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+            <div className="lg:col-span-2 space-y-10">
+              <div className="rounded-[3rem] overflow-hidden h-[500px] shadow-2xl relative">
+                <img src={selectedProject.imageUrl} className="w-full h-full object-cover" alt={selectedProject.name} />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                <div className="absolute bottom-12 left-12 right-12">
+                   <h2 className="text-5xl font-black text-white tracking-tighter mb-4">{selectedProject.name}</h2>
+                   <div className="flex gap-4">
+                      <span className="bg-white/20 backdrop-blur-md text-white px-6 py-2 rounded-full font-black text-xs uppercase">{selectedProject.location}</span>
+                      <span className="bg-[#ff6b35] text-white px-6 py-2 rounded-full font-black text-xs uppercase">Rendement {selectedProject.returnRate}% / an</span>
+                   </div>
+                </div>
+              </div>
+              <div className="bg-white p-12 rounded-[3rem] border border-slate-100 shadow-sm space-y-8">
+                <h3 className="text-2xl font-black uppercase tracking-tight">À propos de cet actif</h3>
+                <p className="text-slate-600 leading-relaxed text-lg">{selectedProject.description}</p>
+                <div className="grid grid-cols-3 gap-6 pt-8 border-t">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cible</p>
+                    <p className="text-lg font-black">{formatCFA(selectedProject.targetAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Collecté</p>
+                    <p className="text-lg font-black text-emerald-600">{formatCFA(selectedProject.collectedAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Durée</p>
+                    <p className="text-lg font-black">{selectedProject.durationMonths} Mois</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-8">
+              <div className="bg-[#0d1b2a] text-white p-10 rounded-[3rem] shadow-2xl sticky top-8">
+                <h4 className="text-xl font-black mb-8 tracking-tight uppercase">Investir dans ce projet</h4>
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 block">Montant souhaité</label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        defaultValue="100000"
+                        className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-black text-2xl outline-none focus:border-[#ff6b35] transition-all"
+                      />
+                      <span className="absolute right-5 top-1/2 -translate-y-1/2 text-white/40 font-black">F CFA</span>
+                    </div>
+                  </div>
+                  <div className="p-6 bg-white/5 rounded-2xl border border-white/5 space-y-4">
+                    <div className="flex justify-between text-xs font-bold">
+                       <span className="text-slate-500">Gains mensuels</span>
+                       <span className="text-emerald-400">+1.000 F CFA</span>
+                    </div>
+                    <div className="flex justify-between text-xs font-bold">
+                       <span className="text-slate-500">Gains annuels</span>
+                       <span className="text-emerald-400">+12.000 F CFA</span>
+                    </div>
+                  </div>
+                  <button className="w-full bg-[#ff6b35] py-6 rounded-2xl font-black text-[12px] uppercase tracking-[0.2em] shadow-xl hover:scale-105 transition-all">Confirmer l'investissement</button>
+                  <p className="text-[10px] text-center text-slate-500 font-medium">Investissement sécurisé par le réseau GESS.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     switch (activeTab) {
       case 'overview':
         return (
@@ -217,13 +310,25 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
+               <DataTable title="Historique récent" data={transactions.filter(t => t.userId === currentUser?.id).slice(0, 5)} columns={[
+                 { header: 'Type', render: (t) => <span className="text-[10px] font-black uppercase text-slate-400">{t.type}</span> },
+                 { header: 'Montant', render: (t) => <span className={`font-black ${t.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{formatCFA(t.amount)}</span> },
+                 { header: 'Date', render: (t) => <span className="text-xs text-slate-500">{new Date(t.date).toLocaleDateString()}</span> },
+                 { header: 'Statut', render: (t) => <StatusBadge status={t.status} /> }
+               ]} />
+            </div>
           </div>
         );
       case 'investments':
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 animate-fade">
             {projects.map(p => (
-              <div key={p.id} className="bg-white rounded-[2.5rem] overflow-hidden border border-slate-100 hover:shadow-2xl transition-all group shadow-sm flex flex-col h-full">
+              <div 
+                key={p.id} 
+                onClick={() => setSelectedProject(p)}
+                className="bg-white rounded-[2.5rem] overflow-hidden border border-slate-100 hover:shadow-2xl transition-all group shadow-sm flex flex-col h-full cursor-pointer"
+              >
                 <div className="h-72 relative overflow-hidden">
                   <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[2000ms]" alt={p.name} />
                   <div className="absolute top-6 left-6 bg-white/95 backdrop-blur-md px-6 py-2 rounded-full text-[10px] font-black uppercase text-slate-900 shadow-xl border border-white/10">{p.location}</div>
@@ -241,7 +346,7 @@ const App: React.FC = () => {
                         <div className="h-full bg-[#ff6b35] rounded-full transition-all duration-1000" style={{ width: `${((p.collectedAmount || 0)/p.targetAmount)*100}%` }}></div>
                       </div>
                     </div>
-                    <button className="w-full py-5 bg-[#0d1b2a] text-white rounded-2xl font-black text-[12px] uppercase tracking-[0.2em] hover:bg-[#ff6b35] transition-all shadow-xl hover:scale-[1.02]">Investir maintenant</button>
+                    <button className="w-full py-5 bg-[#0d1b2a] text-white rounded-2xl font-black text-[12px] uppercase tracking-[0.2em] group-hover:bg-[#ff6b35] transition-all shadow-xl">Voir l'opportunité</button>
                   </div>
                 </div>
               </div>
@@ -328,6 +433,11 @@ const App: React.FC = () => {
             <div className="w-12 h-12 bg-[#ff6b35] rounded-2xl flex items-center justify-center font-black text-white text-2xl shadow-xl shadow-[#ff6b35]/20">G</div>
             <span className="text-3xl font-black tracking-tighter text-[#0d1b2a] uppercase">GESS <span className="text-[#ff6b35]">INVEST</span></span>
           </div>
+          <div className="hidden md:flex gap-10">
+             <a href="#" className="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-[#0d1b2a]">Projets</a>
+             <a href="#" className="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-[#0d1b2a]">Fonctionnement</a>
+             <a href="#" className="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-[#0d1b2a]">Contact</a>
+          </div>
           <button onClick={() => setView('app')} className="bg-[#ff6b35] text-white px-10 py-4 rounded-2xl font-black text-[12px] uppercase tracking-[0.1em] shadow-2xl shadow-[#ff6b35]/30 hover:scale-105 transition-all">Connexion</button>
         </nav>
         <div className="flex-1 flex flex-col items-center justify-center px-6 text-center py-32 bg-[#fcfcfc] relative overflow-hidden">
@@ -368,8 +478,8 @@ const App: React.FC = () => {
       </div>
 
       <div className="fixed bottom-12 left-1/2 -translate-x-1/2 bg-[#0d1b2a]/95 backdrop-blur-2xl p-2.5 rounded-[2.5rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.5)] border border-white/10 z-[5000] flex gap-2">
-        <button onClick={() => { setUserRole('investor'); setActiveTab('overview'); }} className={`px-12 py-5 rounded-[1.75rem] text-[11px] font-black uppercase tracking-[0.2em] transition-all duration-500 ${userRole === 'investor' ? 'bg-[#ff6b35] text-white shadow-xl shadow-[#ff6b35]/20' : 'text-slate-500 hover:text-white'}`}>Investisseur</button>
-        <button onClick={() => { setUserRole('admin'); setActiveTab('overview'); }} className={`px-12 py-5 rounded-[1.75rem] text-[11px] font-black uppercase tracking-[0.2em] transition-all duration-500 ${userRole === 'admin' ? 'bg-white text-[#0d1b2a] shadow-xl' : 'text-slate-500 hover:text-white'}`}>Admin GESS</button>
+        <button onClick={() => { setUserRole('investor'); setActiveTab('overview'); setSelectedProject(null); }} className={`px-12 py-5 rounded-[1.75rem] text-[11px] font-black uppercase tracking-[0.2em] transition-all duration-500 ${userRole === 'investor' ? 'bg-[#ff6b35] text-white shadow-xl shadow-[#ff6b35]/20' : 'text-slate-500 hover:text-white'}`}>Investisseur</button>
+        <button onClick={() => { setUserRole('admin'); setActiveTab('overview'); setSelectedProject(null); }} className={`px-12 py-5 rounded-[1.75rem] text-[11px] font-black uppercase tracking-[0.2em] transition-all duration-500 ${userRole === 'admin' ? 'bg-white text-[#0d1b2a] shadow-xl' : 'text-slate-500 hover:text-white'}`}>Admin GESS</button>
       </div>
 
       {showBalanceModal && (
@@ -386,11 +496,40 @@ const App: React.FC = () => {
             <div className="space-y-4 mb-10">
                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Montant à ajouter/retirer</label>
                <input type="number" value={balanceAdjustment} onChange={(e) => setBalanceAdjustment(Number(e.target.value))} className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-2xl font-black text-xl outline-none focus:border-[#ff6b35] transition-all shadow-inner" placeholder="Ex: 500000" />
-               <p className="text-[10px] text-slate-400 font-medium">*Utilisez un signe négatif (-) pour un retrait manuel.</p>
             </div>
             <div className="flex gap-4">
               <button onClick={() => setShowBalanceModal(null)} className="flex-1 text-slate-400 font-black text-[12px] uppercase tracking-widest hover:text-slate-900 transition-colors">Annuler</button>
               <button onClick={handleUpdateBalance} className="flex-1 bg-[#ff6b35] text-white py-5 rounded-2xl font-black text-[12px] uppercase tracking-widest shadow-xl shadow-[#ff6b35]/20 hover:scale-105 transition-all">Confirmer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddProjectModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[9999] flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-2xl rounded-[3rem] p-12 shadow-2xl animate-fade border border-slate-100 overflow-y-auto max-h-[90vh] custom-scrollbar">
+            <h3 className="text-3xl font-black mb-8 tracking-tighter uppercase italic">Nouveau Projet Immobilier</h3>
+            <div className="grid grid-cols-2 gap-6 mb-10">
+               <div className="col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Nom du projet</label>
+                  <input type="text" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold" placeholder="Résidence Oasis NDjamena" />
+               </div>
+               <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Objectif (F CFA)</label>
+                  <input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold" placeholder="50000000" />
+               </div>
+               <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Rendement (%)</label>
+                  <input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold" placeholder="12" />
+               </div>
+               <div className="col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Description complète</label>
+                  <textarea className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-medium h-32" placeholder="Détails du projet..."></textarea>
+               </div>
+            </div>
+            <div className="flex gap-4">
+              <button onClick={() => setShowAddProjectModal(false)} className="flex-1 text-slate-400 font-black text-[12px] uppercase tracking-widest hover:text-slate-900">Annuler</button>
+              <button className="flex-1 bg-[#0d1b2a] text-white py-5 rounded-2xl font-black text-[12px] uppercase tracking-widest shadow-xl">Créer le projet</button>
             </div>
           </div>
         </div>
