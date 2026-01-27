@@ -1,23 +1,28 @@
 
-# GESS INVEST 2.0 🇹🇩
+# GESS INVEST 🇹🇩 - Guide de Mise en Ligne
 
-Plateforme de Crowdfunding Immobilier moderne pour le marché Tchadien.
+Votre application est prête pour la production.
 
-## 🚀 Migration Terminée
-Nous sommes passés d'un site statique à une **Application Web React (SPA)** connectée à **Supabase**.
+## 🚀 Lancement sur www.gessinvest.com
 
-### Structure du projet :
-- `index.html` : Point d'entrée unique.
-- `App.tsx` : Coeur de l'application (Landing, Admin, Membre).
-- `lib/supabase.ts` : Configuration de la base de données.
-- `types.ts` : Définition des modèles de données.
-- `components/` : Composants réutilisables (Layout, DataTable).
+Comme vos domaines sont déjà validés sur Vercel, suivez ces étapes :
 
-### Installation :
-1. Créez un projet sur [Supabase](https://supabase.com).
-2. Configurez vos clés API dans `lib/supabase.ts`.
-3. Déployez sur Vercel en liant votre dépôt GitHub.
+1. **Push vers GitHub** :
+   ```bash
+   git add .
+   git commit -m "Prêt pour la production"
+   git push origin main
+   ```
 
-### Contact Support :
-📧 gess.srh.td@gmail.com
-📞 +235 66 59 08 78
+2. **Vérification Vercel** :
+   - Allez sur votre dashboard Vercel.
+   - Le déploiement devrait se lancer automatiquement.
+   - Une fois terminé ("Ready"), votre site sera en ligne sur **https://www.gessinvest.com**.
+
+## 🛠 Rappel Configuration
+- **Base de données** : Supabase est déjà connecté.
+- **Routage** : Géré par `vercel.json` (permet le rafraîchissement des pages sans erreur).
+
+---
+📧 Support : gess.srh.td@gmail.com
+📞 Contact : +235 66 59 08 78
