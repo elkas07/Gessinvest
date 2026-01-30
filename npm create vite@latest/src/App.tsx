@@ -1,22 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import DataTable from './components/DataTable';
-import { Project, UserProfile, Transaction } from './types';
+import type { Project, UserProfile, Transaction } from './types';
 import { supabase } from './lib/supabase';
 
 const formatCFA = (val: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(val).replace('XOF', 'F CFA');
 
 const StatusBadge = ({ status }: { status: string }) => {
   const styles: Record<string, string> = {
-    'Validé': 'bg-emerald-50 text-emerald-700 border-emerald-100',
-    'En attente': 'bg-amber-50 text-amber-700 border-amber-100',
-    'Rejeté': 'bg-rose-50 text-rose-700 border-rose-100',
-    'verified': 'bg-blue-50 text-blue-700 border-blue-100',
-    'pending': 'bg-orange-50 text-orange-700 border-orange-100',
-    'active': 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    'Validé': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    'En attente': 'bg-amber-100 text-amber-800 border-amber-200',
+    'Rejeté': 'bg-rose-100 text-rose-800 border-rose-200',
+    'verified': 'bg-blue-100 text-blue-800 border-blue-200',
+    'pending': 'bg-orange-100 text-orange-800 border-orange-200',
+    'active': 'bg-emerald-100 text-emerald-800 border-emerald-200',
   };
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase tracking-wider ${styles[status] || 'bg-gray-50 text-gray-500 border-gray-100'}`}>
+    <span className={`px-5 py-2 rounded-full text-sm font-black border uppercase tracking-widest ${styles[status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
       {status === 'verified' ? 'Vérifié' : status === 'pending' ? 'Attente' : status}
     </span>
   );
@@ -66,7 +66,7 @@ const App: React.FC = () => {
       }
       if (prof) {
         setAllUsers(prof);
-        setCurrentUser(prof[0]);
+        if (prof.length > 0) setCurrentUser(prof[0]);
       }
       if (trans) setTransactions(trans);
     } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -89,74 +89,74 @@ const App: React.FC = () => {
   };
 
   const renderSimulatorSection = (compact = false) => (
-    <div className={`bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden ${compact ? '' : 'max-w-5xl mx-auto'}`}>
+    <div className={`bg-white rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden ${compact ? '' : 'max-w-6xl mx-auto'}`}>
       <div className="grid grid-cols-1 md:grid-cols-2">
-        <div className="p-8 border-r border-slate-50">
-          <h4 className="text-[10px] font-black text-[#ff6b35] uppercase tracking-widest mb-6">Simulateur GESS Now</h4>
-          <div className="space-y-8">
+        <div className="p-16 border-r border-slate-50">
+          <h4 className="text-sm font-black text-[#ff6b35] uppercase tracking-[0.4em] mb-12 italic">Simulateur GESS Now</h4>
+          <div className="space-y-12">
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-3">Montant de la commission</label>
+              <label className="text-base font-bold text-slate-400 uppercase block mb-6 tracking-widest">Montant de votre commission</label>
               <div className="relative">
-                <input type="number" value={commAmount} onChange={(e) => setCommAmount(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-black text-xl outline-none focus:border-[#ff6b35]" />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300">CFA</span>
+                <input type="number" value={commAmount} onChange={(e) => setCommAmount(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 p-8 rounded-3xl font-black text-4xl outline-none focus:border-[#ff6b35] shadow-inner" />
+                <span className="absolute right-8 top-1/2 -translate-y-1/2 font-black text-slate-300 text-2xl uppercase tracking-tighter">F CFA</span>
               </div>
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-3">Pourcentage de déblocage ({perc}%)</label>
-              <input type="range" min="10" max="90" step="5" value={perc} onChange={(e) => setPerc(Number(e.target.value))} className="w-full h-2 bg-slate-100 rounded-full appearance-none cursor-pointer accent-[#ff6b35]" />
-              <div className="flex justify-between mt-2 text-[9px] font-bold text-slate-300">
+              <label className="text-base font-bold text-slate-400 uppercase block mb-6 tracking-widest">Pourcentage de déblocage ({perc}%)</label>
+              <input type="range" min="10" max="90" step="5" value={perc} onChange={(e) => setPerc(Number(e.target.value))} className="w-full h-4 bg-slate-100 rounded-full appearance-none cursor-pointer accent-[#ff6b35]" />
+              <div className="flex justify-between mt-6 text-sm font-black text-slate-300 uppercase tracking-[0.3em]">
                 <span>10%</span><span>50%</span><span>90%</span>
               </div>
             </div>
           </div>
         </div>
-        <div className="p-8 bg-slate-50 flex flex-col justify-center items-center text-center">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Net à percevoir sous 24h</p>
-          <div className="text-4xl font-black text-[#0d1b2a] tracking-tighter mb-6">{formatCFA(commAmount * (perc/100) * 0.97)}</div>
-          <button onClick={() => setView('app')} className="bg-[#ff6b35] text-white px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:scale-105 transition-all">Faire ma demande</button>
-          <p className="mt-4 text-[9px] text-slate-400 font-medium italic">Frais de service de 3% inclus. Validation en 48h.</p>
+        <div className="p-16 bg-slate-50 flex flex-col justify-center items-center text-center">
+          <p className="text-base font-black text-slate-400 uppercase tracking-[0.4em] mb-6">Trésorerie garantie sous 24h</p>
+          <div className="text-7xl font-black text-[#0d1b2a] tracking-tighter mb-12 leading-none italic">{formatCFA(commAmount * (perc/100) * 0.97)}</div>
+          <button onClick={() => setView('app')} className="bg-[#ff6b35] text-white px-16 py-8 rounded-[2rem] font-black text-lg uppercase tracking-[0.25em] shadow-2xl hover:scale-105 transition-all">Lancer ma demande</button>
+          <p className="mt-8 text-sm text-slate-400 font-bold italic">Frais de service de 3% inclus. Validation immédiate.</p>
         </div>
       </div>
     </div>
   );
 
   const renderLanding = () => (
-    <div className="min-h-screen bg-white">
-      <nav className="h-20 border-b flex items-center justify-between px-8 md:px-20 bg-white sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#ff6b35] rounded-xl flex items-center justify-center font-black text-white text-xl">G</div>
-          <span className="text-xl font-black tracking-tighter text-[#0d1b2a] uppercase italic">GESS <span className="text-[#ff6b35]">INVEST</span></span>
+    <div className="min-h-screen bg-white animate-fade">
+      <nav className="h-32 border-b-2 flex items-center justify-between px-10 md:px-24 bg-white sticky top-0 z-50">
+        <div className="flex items-center gap-6">
+          <div className="w-16 h-16 bg-[#ff6b35] rounded-2xl flex items-center justify-center font-black text-white text-4xl">G</div>
+          <span className="text-4xl font-black tracking-tighter text-[#0d1b2a] uppercase italic">GESS <span className="text-[#ff6b35]">INVEST</span></span>
         </div>
-        <div className="flex items-center gap-8">
-          <button className="hidden md:block font-bold text-[10px] uppercase tracking-widest text-slate-400 hover:text-[#ff6b35]">Marché</button>
-          <button className="hidden md:block font-bold text-[10px] uppercase tracking-widest text-slate-400 hover:text-[#ff6b35]">Expertise</button>
-          <button onClick={() => setView('app')} className="bg-[#0d1b2a] text-white px-8 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-[#ff6b35] transition-all">Connexion</button>
+        <div className="flex items-center gap-16">
+          <button className="hidden md:block font-bold text-base uppercase tracking-[0.3em] text-slate-400 hover:text-[#ff6b35] transition-colors">Projets</button>
+          <button className="hidden md:block font-bold text-base uppercase tracking-[0.3em] text-slate-400 hover:text-[#ff6b35] transition-colors">À propos</button>
+          <button onClick={() => setView('app')} className="bg-[#0d1b2a] text-white px-14 py-6 rounded-2xl font-black text-base uppercase tracking-[0.2em] shadow-2xl hover:bg-[#ff6b35] transition-all">Connexion</button>
         </div>
       </nav>
 
-      <div className="pt-20 pb-32 px-8 text-center max-w-6xl mx-auto">
-        <h1 className="text-5xl md:text-7xl font-black text-[#0d1b2a] tracking-tighter leading-none mb-10">
-          L'immobilier au <span className="text-[#ff6b35] italic">Tchad</span>,<br/>enfin accessible à tous.
+      <div className="pt-24 pb-48 px-8 text-center max-w-7xl mx-auto">
+        <h1 className="text-6xl md:text-[7rem] font-black text-[#0d1b2a] tracking-tighter leading-[0.8] mb-16">
+          Investir au <span className="text-[#ff6b35] italic underline decoration-8 underline-offset-[20px]">Tchad</span>,<br/>pour tous.
         </h1>
-        <p className="text-slate-500 text-lg font-medium max-w-2xl mx-auto mb-16">
-          Investissez, financez vos projets ou accélérez votre trésorerie d'agence sur une plateforme unique et sécurisée.
+        <p className="text-slate-500 text-3xl font-medium max-w-5xl mx-auto mb-28 leading-relaxed">
+          Rejoignez la révolution immobilière. Financez vos projets prestigieux ou faites fructifier votre épargne en toute sérénité.
         </p>
 
-        <div className="mb-24">
-          <h3 className="text-2xl font-black mb-10 tracking-tight">Calculez le montant que vous pouvez percevoir</h3>
+        <div className="mb-48">
+          <h3 className="text-4xl font-black mb-20 tracking-tight uppercase italic underline decoration-[#ff6b35] decoration-4 underline-offset-[16px]">Estimez votre avance GESS Now</h3>
           {renderSimulatorSection()}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-16 text-left">
           {[
-            { title: "Investisseurs", desc: "Percevez des loyers mensuels dès 10.000 F CFA d'investissement.", icon: "💰" },
-            { title: "Agences Immo", desc: "GESS Now : Touchez vos commissions dès le compromis signé.", icon: "⚡" },
-            { title: "Promoteurs", desc: "Financez vos chantiers grâce à notre communauté de 470k membres.", icon: "🏗️" }
+            { title: "Investisseurs", desc: "Devenez copropriétaire dès 10.000 F CFA et recevez vos revenus locatifs mensuellement.", icon: "💰" },
+            { title: "Agences Immo", desc: "GESS Now : Touchez vos commissions dès le compromis signé. Plus besoin d'attendre le notaire.", icon: "⚡" },
+            { title: "Promoteurs", desc: "Levez des fonds en un temps record grâce à notre réseau d'investisseurs qualifiés.", icon: "🏗️" }
           ].map((item, i) => (
-            <div key={i} className="p-8 border border-slate-100 rounded-2xl hover:border-[#ff6b35]/30 transition-all bg-white shadow-sm">
-              <div className="text-3xl mb-4">{item.icon}</div>
-              <h5 className="font-black text-lg mb-2">{item.title}</h5>
-              <p className="text-sm text-slate-500 leading-relaxed">{item.desc}</p>
+            <div key={i} className="p-14 border-4 border-slate-50 rounded-[4rem] hover:border-[#ff6b35] transition-all bg-white shadow-xl group">
+              <div className="text-7xl mb-10 group-hover:scale-125 transition-transform duration-700">{item.icon}</div>
+              <h5 className="font-black text-3xl mb-6 tracking-tight uppercase italic">{item.title}</h5>
+              <p className="text-xl text-slate-500 leading-relaxed font-semibold">{item.desc}</p>
             </div>
           ))}
         </div>
@@ -165,60 +165,72 @@ const App: React.FC = () => {
   );
 
   const renderAdmin = () => (
-    <div className="space-y-6 animate-fade">
-      <div className="grid grid-cols-4 gap-4">
+    <div className="space-y-16 animate-fade">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
         {[
-          { label: "Collecte Totale", val: formatCFA(125000000) },
-          { label: "Utilisateurs", val: allUsers.length },
-          { label: "Projets", val: projects.length },
-          { label: "KYC Attente", val: allUsers.filter(u => u.kycStatus === 'pending').length },
+          { label: "Volume Collecté", val: formatCFA(125000000) },
+          { label: "Membres GESS", val: allUsers.length },
+          { label: "Actifs Immobiliers", val: projects.length },
+          { label: "KYC à traiter", val: allUsers.filter(u => u.kycStatus === 'pending').length },
         ].map((s, i) => (
-          <div key={i} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.label}</p>
-            <p className="text-xl font-black text-slate-900">{s.val}</p>
+          <div key={i} className="bg-white p-12 rounded-[2.5rem] border-2 border-slate-50 shadow-xl">
+            <p className="text-base font-black text-slate-400 uppercase tracking-[0.3em] mb-4">{s.label}</p>
+            <p className="text-4xl font-black text-slate-900 tracking-tight leading-none">{s.val}</p>
           </div>
         ))}
       </div>
-      <DataTable 
-        title="Membres du réseau" 
-        data={allUsers} columns={[
-          { header: 'Utilisateur', render: (u) => <div className="font-bold text-xs">{u.name}</div> },
-          { header: 'Rôle', render: (u) => <span className="text-[9px] font-black uppercase text-slate-400">{u.role}</span> },
-          { header: 'Solde', render: (u) => <div className="font-black text-slate-900 text-xs">{formatCFA(u.balance || 0)}</div> },
-          { header: 'KYC', render: (u) => <StatusBadge status={u.kycStatus} /> },
-          { header: 'Action', render: (u) => (
-            <button onClick={() => setShowBalanceModal(u)} className="bg-[#0d1b2a] text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase hover:bg-[#ff6b35]">Gérer</button>
-          )}
-      ]} />
+      
+      {activeTab === 'users' && (
+        <DataTable 
+          title="Gestion Administrative" 
+          data={allUsers} columns={[
+            { header: 'Utilisateur', render: (u) => <div className="font-black text-xl text-slate-900">{u.name}</div> },
+            { header: 'Rôle', render: (u) => <span className="text-sm font-black uppercase text-slate-400 tracking-widest">{u.role}</span> },
+            { header: 'Solde GESS', render: (u) => <div className="font-black text-slate-900 text-lg italic">{formatCFA(u.balance || 0)}</div> },
+            { header: 'Statut ID', render: (u) => <StatusBadge status={u.kycStatus} /> },
+            { header: 'Action', render: (u) => (
+              <button onClick={() => setShowBalanceModal(u)} className="bg-[#0d1b2a] text-white px-8 py-4 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-[#ff6b35] transition-all shadow-xl">Gérer Solde</button>
+            )}
+        ]} />
+      )}
+
+      {activeTab === 'overview' && (
+        <DataTable title="Dernières Activités" data={transactions.slice(0, 10)} columns={[
+          { header: 'Membre', render: (t) => <div className="font-bold">{allUsers.find(u => u.id === t.userId)?.name || 'Inconnu'}</div> },
+          { header: 'Type', render: (t) => <span className="uppercase text-xs font-black tracking-widest">{t.type}</span> },
+          { header: 'Montant', render: (t) => <div className="font-black italic text-lg">{formatCFA(t.amount)}</div> },
+          { header: 'Statut', render: (t) => <StatusBadge status={t.status} /> }
+        ]} />
+      )}
     </div>
   );
 
   const renderAgency = () => (
-    <div className="space-y-8 animate-fade">
-      <div className="bg-[#0d1b2a] rounded-3xl p-10 text-white relative overflow-hidden shadow-xl">
+    <div className="space-y-16 animate-fade">
+      <div className="bg-[#0d1b2a] rounded-[4rem] p-20 text-white relative overflow-hidden shadow-2xl border-2 border-white/5">
         <div className="relative z-10">
-          <span className="bg-[#ff6b35] text-[9px] font-black uppercase px-3 py-1 rounded-full mb-4 inline-block">Service GESS Now</span>
-          <h2 className="text-3xl font-black mb-4">Avance de Trésorerie</h2>
-          <p className="text-slate-400 text-sm max-w-md">Débloquez vos commissions sous 24h sans attendre la signature notariale.</p>
+          <span className="bg-[#ff6b35] text-base font-black uppercase px-8 py-3 rounded-full mb-10 inline-block tracking-[0.4em] shadow-2xl">SERVICE GESS NOW</span>
+          <h2 className="text-6xl font-black mb-8 tracking-tighter">Trésorerie sur Demande</h2>
+          <p className="text-slate-400 text-2xl max-w-2xl leading-relaxed font-semibold italic">Boostez l'activité de votre agence. Vos commissions sont payées en 24h chrono dès validation du compromis.</p>
         </div>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
+        <div className="absolute top-0 right-0 w-[50rem] h-[50rem] bg-[#ff6b35]/20 rounded-full blur-[150px] -mr-64 -mt-64"></div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
         {renderSimulatorSection(true)}
-        <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-          <h3 className="text-lg font-black mb-6 tracking-tight">Dossiers récents</h3>
-          <div className="space-y-4">
+        <div className="bg-white p-16 rounded-[4rem] border-2 border-slate-50 shadow-2xl">
+          <h3 className="text-3xl font-black mb-12 tracking-tight uppercase italic underline decoration-[#ff6b35] decoration-8 underline-offset-[12px]">Historique GESS Now</h3>
+          <div className="space-y-8">
             {[
-              { ref: 'VIL-22-01', status: 'Validé', amount: 4500000 },
-              { ref: 'IMM-22-05', status: 'En attente', amount: 12000000 },
+              { ref: 'VIL-22-01', status: 'Validé', amount: 4500000, date: '15/11/2023' },
+              { ref: 'IMM-22-05', status: 'En attente', amount: 12000000, date: '12/11/2023' },
             ].map((d, i) => (
-              <div key={i} className="flex justify-between items-center p-4 border border-slate-50 rounded-xl hover:bg-slate-50">
+              <div key={i} className="flex justify-between items-center p-10 border-4 border-slate-50 rounded-[3rem] hover:bg-slate-50 transition-all group">
                 <div>
-                  <p className="font-bold text-xs">Dossier #{d.ref}</p>
-                  <p className="text-[9px] font-bold text-slate-400">12/10/2023</p>
+                  <p className="font-black text-2xl text-slate-900 group-hover:text-[#ff6b35] transition-colors uppercase italic">Dossier #{d.ref}</p>
+                  <p className="text-sm font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">{d.date}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-black text-xs mb-1">{formatCFA(d.amount)}</p>
+                  <p className="font-black text-3xl mb-4 text-slate-900 leading-none italic">{formatCFA(d.amount)}</p>
                   <StatusBadge status={d.status} />
                 </div>
               </div>
@@ -230,41 +242,41 @@ const App: React.FC = () => {
   );
 
   const renderDeveloper = () => (
-    <div className="space-y-8 animate-fade">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-black tracking-tight uppercase italic">Portefeuille Promoteur</h2>
-        <button onClick={() => setShowAddProjectModal(true)} className="bg-[#ff6b35] text-white px-6 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg">Soumettre un Projet</button>
+    <div className="space-y-16 animate-fade">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-10">
+        <h2 className="text-5xl font-black tracking-tighter uppercase italic text-slate-900 underline decoration-[#ff6b35] decoration-8 underline-offset-[16px]">Suivi Chantiers</h2>
+        <button onClick={() => setShowAddProjectModal(true)} className="bg-[#ff6b35] text-white px-12 py-7 rounded-[2rem] font-black text-lg uppercase tracking-widest shadow-2xl hover:scale-105 transition-all">Nouveau Financement</button>
       </div>
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
         {[
-          { label: "Capitaux Levés", val: formatCFA(125000000) },
-          { label: "Actifs", val: "2 Chantiers" },
-          { label: "Copropriétaires", val: "1.240" },
+          { label: "Capitaux Débloqués", val: formatCFA(125000000) },
+          { label: "Chantiers Actifs", val: "3 Sites" },
+          { label: "Investisseurs GESS", val: "2,450" },
         ].map((s, i) => (
-          <div key={i} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.label}</p>
-            <p className="text-xl font-black text-slate-900">{s.val}</p>
+          <div key={i} className="bg-white p-14 rounded-[3rem] border-2 border-slate-50 shadow-2xl">
+            <p className="text-base font-black text-slate-400 uppercase tracking-[0.3em] mb-4">{s.label}</p>
+            <p className="text-5xl font-black text-slate-900 tracking-tight leading-none italic">{s.val}</p>
           </div>
         ))}
       </div>
-      <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-        <h3 className="text-lg font-black mb-8 underline decoration-[#ff6b35] decoration-2">Suivi des collectes</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="bg-white p-16 rounded-[4rem] border-2 border-slate-50 shadow-2xl">
+        <h3 className="text-4xl font-black mb-16 tracking-tight uppercase italic underline decoration-[#ff6b35] decoration-8 underline-offset-[16px]">Progression Financements</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
           {projects.slice(0, 2).map(p => (
-            <div key={p.id} className="p-6 border border-slate-50 rounded-2xl space-y-4">
-              <div className="flex gap-4 items-center">
-                <img src={p.imageUrl} className="w-16 h-16 rounded-xl object-cover shadow-md" />
+            <div key={p.id} className="p-12 border-4 border-slate-50 rounded-[3.5rem] space-y-10 hover:border-[#ff6b35]/40 transition-all">
+              <div className="flex gap-10 items-center">
+                <img src={p.imageUrl} className="w-32 h-32 rounded-[2.5rem] object-cover shadow-2xl border-4 border-white" />
                 <div>
-                  <h4 className="font-black text-sm">{p.name}</h4>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{p.location}</p>
+                  <h4 className="font-black text-3xl text-slate-900 leading-tight mb-3 uppercase italic">{p.name}</h4>
+                  <p className="text-lg font-bold text-slate-400 uppercase tracking-widest">{p.location}</p>
                 </div>
               </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-[9px] font-black uppercase text-slate-400">
+              <div className="space-y-6">
+                <div className="flex justify-between text-base font-black uppercase text-slate-400 tracking-[0.4em]">
                   <span>Progression</span><span>{Math.round(((p.collectedAmount||0)/p.targetAmount)*100)}%</span>
                 </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#ff6b35]" style={{ width: `${((p.collectedAmount||0)/p.targetAmount)*100}%` }}></div>
+                <div className="h-6 bg-slate-100 rounded-full overflow-hidden shadow-inner border-2 border-white">
+                  <div className="h-full bg-[#ff6b35] transition-all duration-[2500ms]" style={{ width: `${((p.collectedAmount||0)/p.targetAmount)*100}%` }}></div>
                 </div>
               </div>
             </div>
@@ -278,36 +290,40 @@ const App: React.FC = () => {
     if (selectedProject) {
       return (
         <div className="animate-fade">
-          <button onClick={() => setSelectedProject(null)} className="mb-6 flex items-center gap-2 text-slate-400 hover:text-slate-900 font-black text-[9px] uppercase tracking-widest">
-            ← Retour aux opportunités
+          <button onClick={() => setSelectedProject(null)} className="mb-14 flex items-center gap-6 text-slate-400 hover:text-slate-900 font-black text-lg uppercase tracking-[0.4em] transition-all">
+            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            Retour au Marché
           </button>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="rounded-3xl overflow-hidden h-[400px] shadow-lg relative">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
+            <div className="lg:col-span-2 space-y-12">
+              <div className="rounded-[4rem] overflow-hidden h-[650px] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] relative border-4 border-white">
                 <img src={selectedProject.imageUrl} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent"></div>
-                <div className="absolute bottom-8 left-8">
-                   <h2 className="text-3xl font-black text-white tracking-tighter mb-2">{selectedProject.name}</h2>
-                   <div className="flex gap-3">
-                      <span className="bg-white/20 backdrop-blur-md text-white px-3 py-1 rounded-full font-bold text-[9px] uppercase">{selectedProject.location}</span>
-                      <span className="bg-[#ff6b35] text-white px-3 py-1 rounded-full font-bold text-[9px] uppercase">Rendement {selectedProject.returnRate}% / AN</span>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/20 to-transparent"></div>
+                <div className="absolute bottom-16 left-16 right-16">
+                   <h2 className="text-7xl font-black text-white tracking-tighter mb-8 leading-[0.85] italic uppercase">{selectedProject.name}</h2>
+                   <div className="flex flex-wrap gap-8">
+                      <span className="bg-white/10 backdrop-blur-2xl text-white px-10 py-4 rounded-[1.5rem] font-black text-base uppercase tracking-[0.3em] border-2 border-white/20">{selectedProject.location}</span>
+                      <span className="bg-[#ff6b35] text-white px-10 py-4 rounded-[1.5rem] font-black text-base uppercase tracking-[0.3em] shadow-2xl">ROI {selectedProject.returnRate}% / AN</span>
                    </div>
                 </div>
               </div>
-              <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                <h3 className="text-xl font-black uppercase tracking-tight mb-6">Détails de l'Actif</h3>
-                <p className="text-slate-600 text-sm leading-relaxed">{selectedProject.description}</p>
+              <div className="bg-white p-16 rounded-[4rem] border-2 border-slate-50 shadow-2xl">
+                <h3 className="text-4xl font-black uppercase tracking-tight mb-12 italic underline decoration-[#ff6b35] decoration-8 underline-offset-[20px]">Détails de l'Actif</h3>
+                <p className="text-slate-600 text-2xl leading-relaxed font-semibold italic">{selectedProject.description}</p>
               </div>
             </div>
-            <div className="bg-[#0d1b2a] text-white p-8 rounded-3xl shadow-xl h-fit border border-white/5">
-              <h4 className="text-lg font-black mb-8 italic underline decoration-[#ff6b35] decoration-2">Investir</h4>
-              <div className="space-y-6">
+            <div className="bg-[#0d1b2a] text-white p-16 rounded-[4rem] shadow-2xl h-fit border-2 border-white/10 sticky top-40">
+              <h4 className="text-4xl font-black mb-14 italic underline decoration-[#ff6b35] decoration-8 underline-offset-[16px] uppercase tracking-tight">Investir</h4>
+              <div className="space-y-14">
                 <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase block mb-2">Montant (F CFA)</label>
-                  <input type="number" defaultValue="250000" className="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-black text-xl outline-none focus:border-[#ff6b35]" />
+                  <label className="text-base font-black text-slate-500 uppercase block mb-8 tracking-[0.4em]">Montant de l'engagement (F CFA)</label>
+                  <input type="number" defaultValue="500000" className="w-full bg-white/5 border-2 border-white/10 p-8 rounded-[2rem] font-black text-5xl outline-none focus:border-[#ff6b35] text-white shadow-inner" />
                 </div>
-                <button className="w-full bg-[#ff6b35] py-5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:scale-105 transition-all">Devenir Copropriétaire</button>
-                <p className="text-[8px] text-center text-slate-500 font-bold uppercase tracking-[0.2em]">Sécurisé par GESS INVEST</p>
+                <button className="w-full bg-[#ff6b35] py-10 rounded-[2rem] font-black text-xl uppercase tracking-[0.3em] shadow-2xl hover:scale-105 transition-all">Valider mon Placement</button>
+                <div className="pt-12 border-t-2 border-white/5 text-center">
+                   <p className="text-sm text-slate-500 font-black uppercase tracking-[0.5em] mb-6">Securisé par GESS INVEST</p>
+                   <p className="text-base text-slate-400 font-bold leading-relaxed italic">Votre certificat d'investissement est généré dès confirmation.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -318,54 +334,59 @@ const App: React.FC = () => {
     switch (activeTab) {
       case 'overview':
         return (
-          <div className="space-y-8 animate-fade">
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 bg-[#0d1b2a] rounded-3xl p-10 text-white relative overflow-hidden shadow-lg">
+          <div className="space-y-16 animate-fade">
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+              <div className="lg:col-span-2 bg-[#0d1b2a] rounded-[4rem] p-20 text-white relative overflow-hidden shadow-2xl border-2 border-white/5">
                 <div className="relative z-10">
-                  <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.3em] mb-2">Solde Disponible</p>
-                  <h2 className="text-5xl font-black tracking-tighter">{formatCFA(currentUser?.balance || 0)}</h2>
-                  <div className="mt-8 flex gap-4">
-                    <button className="bg-[#ff6b35] text-white px-8 py-3.5 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg">Approvisionner</button>
-                    <button className="bg-white/5 text-white px-8 py-3.5 rounded-xl font-black text-[9px] uppercase tracking-widest border border-white/10">Retrait</button>
+                  <p className="text-slate-500 text-base font-black uppercase tracking-[0.6em] mb-8">Solde de Trésorerie</p>
+                  <h2 className="text-8xl font-black tracking-tighter leading-none mb-20 italic">{formatCFA(currentUser?.balance || 0)}</h2>
+                  <div className="flex flex-wrap gap-10">
+                    <button className="bg-[#ff6b35] text-white px-14 py-7 rounded-[1.5rem] font-black text-base uppercase tracking-[0.3em] shadow-2xl hover:bg-white hover:text-[#ff6b35] transition-all">Approvisionner</button>
+                    <button className="bg-white/5 text-white px-14 py-7 rounded-[1.5rem] font-black text-base uppercase tracking-[0.3em] border-2 border-white/10 hover:bg-white/10 transition-all">Effectuer Retrait</button>
                   </div>
                 </div>
-                <div className="absolute top-0 right-0 w-64 h-64 bg-[#ff6b35]/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
+                <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-[#ff6b35]/20 rounded-full blur-[150px] -mr-40 -mt-40"></div>
               </div>
-              <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm flex flex-col justify-between">
+              <div className="bg-white rounded-[4rem] p-16 border-2 border-slate-50 shadow-2xl flex flex-col justify-between">
                 <div>
-                  <p className="text-slate-400 text-[9px] font-black uppercase mb-2 tracking-widest">Dividendes Total</p>
-                  <h3 className="text-4xl font-black text-emerald-600 tracking-tighter italic">{formatCFA((currentUser?.totalInvested || 0) * 0.12)}</h3>
+                  <p className="text-slate-400 text-base font-black uppercase mb-6 tracking-[0.4em]">Revenus cumulés</p>
+                  <h3 className="text-7xl font-black text-emerald-600 tracking-tighter italic leading-none">{formatCFA((currentUser?.totalInvested || 0) * 0.12)}</h3>
                 </div>
-                <div className="pt-6 border-t border-slate-50 flex justify-between items-center">
-                  <span className="text-[9px] font-black text-slate-400 uppercase">Statut</span>
+                <div className="pt-12 border-t-2 border-slate-50 flex justify-between items-center">
+                  <span className="text-base font-black text-slate-400 uppercase tracking-[0.4em]">Validation ID</span>
                   <StatusBadge status={currentUser?.kycStatus || 'pending'} />
                 </div>
               </div>
             </div>
-            <DataTable title="Historique" data={transactions.filter(t => t.userId === currentUser?.id).slice(0, 5)} columns={[
-              { header: 'Action', render: (t) => <span className="text-[9px] font-bold text-slate-400 uppercase">{t.type}</span> },
-              { header: 'Montant', render: (t) => <span className={`font-black text-xs ${t.type === 'Dépôt' ? 'text-emerald-600' : 'text-rose-600'}`}>{formatCFA(t.amount)}</span> },
-              { header: 'Statut', render: (t) => <StatusBadge status={t.status} /> }
+            <DataTable title="Dernières Opérations" data={transactions.filter(t => t.userId === currentUser?.id).slice(0, 5)} columns={[
+              { header: 'Nature', render: (t) => <span className="text-base font-black text-slate-500 uppercase tracking-[0.3em]">{t.type}</span> },
+              { header: 'Montant', render: (t) => <span className={`font-black text-2xl italic ${t.type === 'Dépôt' ? 'text-emerald-600' : 'text-rose-600'}`}>{formatCFA(t.amount)}</span> },
+              { header: 'Statut GESS', render: (t) => <StatusBadge status={t.status} /> }
             ]} />
           </div>
         );
       case 'investments':
         return (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-14 animate-fade">
             {projects.map(p => (
-              <div key={p.id} onClick={() => setSelectedProject(p)} className="bg-white rounded-2xl overflow-hidden border border-slate-100 hover:shadow-xl transition-all cursor-pointer group shadow-sm flex flex-col">
-                <div className="h-56 relative overflow-hidden">
-                  <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[3000ms]" />
-                  <div className="absolute top-4 left-4 bg-white/95 px-4 py-1.5 rounded-full text-[8px] font-black uppercase shadow-lg">{p.location}</div>
-                  <div className="absolute bottom-4 right-4 bg-[#ff6b35] text-white px-4 py-2 rounded-xl text-[11px] font-black shadow-lg">ROI {p.returnRate}%</div>
+              <div key={p.id} onClick={() => setSelectedProject(p)} className="bg-white rounded-[3.5rem] overflow-hidden border-2 border-slate-50 hover:shadow-[0_50px_100px_-20px_rgba(0,0,0,0.2)] transition-all cursor-pointer group shadow-2xl flex flex-col h-full">
+                <div className="h-80 relative overflow-hidden">
+                  <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[5000ms]" />
+                  <div className="absolute top-8 left-8 bg-white/95 px-8 py-3 rounded-2xl text-sm font-black uppercase tracking-[0.3em] shadow-2xl text-[#0d1b2a] border-2 border-slate-50">{p.location}</div>
+                  <div className="absolute bottom-8 right-8 bg-[#ff6b35] text-white px-8 py-4 rounded-2xl text-base font-black shadow-2xl tracking-[0.2em] uppercase">ROI {p.returnRate}% / AN</div>
                 </div>
-                <div className="p-6 flex-1 flex flex-col">
-                  <h4 className="text-lg font-black text-slate-900 leading-tight mb-6">{p.name}</h4>
-                  <div className="mt-auto space-y-4">
-                    <div className="h-1.5 bg-slate-50 rounded-full overflow-hidden shadow-inner">
-                      <div className="h-full bg-[#ff6b35]" style={{ width: `${((p.collectedAmount||0)/p.targetAmount)*100}%` }}></div>
+                <div className="p-12 flex-1 flex flex-col">
+                  <h4 className="text-3xl font-black text-slate-900 leading-tight mb-10 group-hover:text-[#ff6b35] transition-colors uppercase italic italic tracking-tighter">{p.name}</h4>
+                  <div className="mt-auto space-y-10">
+                    <div className="space-y-4">
+                       <div className="flex justify-between text-sm font-black text-slate-400 uppercase tracking-[0.3em]">
+                          <span>Collecte: {Math.round(((p.collectedAmount||0)/p.targetAmount)*100)}%</span>
+                       </div>
+                       <div className="h-4 bg-slate-50 rounded-full overflow-hidden shadow-inner border-2 border-white">
+                         <div className="h-full bg-[#ff6b35] transition-all duration-[2500ms]" style={{ width: `${((p.collectedAmount||0)/p.targetAmount)*100}%` }}></div>
+                       </div>
                     </div>
-                    <button className="w-full py-3.5 bg-[#0d1b2a] text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-[#ff6b35] transition-all">Détails</button>
+                    <button className="w-full py-7 bg-[#0d1b2a] text-white rounded-[2rem] font-black text-base uppercase tracking-[0.3em] hover:bg-[#ff6b35] transition-all transform group-hover:-translate-y-4 shadow-2xl">Consulter l'offre</button>
                   </div>
                 </div>
               </div>
@@ -374,18 +395,19 @@ const App: React.FC = () => {
         );
       case 'simulator':
         return (
-          <div className="max-w-xl mx-auto py-6 animate-fade text-center">
-            <div className="bg-white p-10 rounded-3xl border border-slate-100 shadow-xl">
-                <h3 className="text-4xl font-black text-slate-900 tracking-tighter mb-10 italic">Simulateur ROI</h3>
-                <div className="space-y-12">
-                  <div className="flex justify-between items-end mb-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">Investissement souhaité</label>
-                    <div className="text-3xl font-black text-[#ff6b35] tracking-tighter">{formatCFA(simInvAmount)}</div>
+          <div className="max-w-4xl mx-auto py-16 animate-fade text-center">
+            <div className="bg-white p-20 rounded-[5rem] border-2 border-slate-50 shadow-[0_60px_120px_-30px_rgba(0,0,0,0.15)]">
+                <h3 className="text-6xl font-black text-slate-900 tracking-tighter mb-20 italic underline decoration-[#ff6b35] decoration-8 underline-offset-[20px] uppercase">Votre Futur Immobiler</h3>
+                <div className="space-y-24">
+                  <div className="flex flex-col sm:flex-row justify-between items-center mb-10 gap-8">
+                    <label className="text-base font-black text-slate-400 uppercase tracking-[0.5em]">Capital d'investissement</label>
+                    <div className="text-6xl font-black text-[#ff6b35] tracking-tighter italic">{formatCFA(simInvAmount)}</div>
                   </div>
-                  <input type="range" min="10000" max="5000000" step="10000" value={simInvAmount} onChange={(e) => setSimInvAmount(parseInt(e.target.value))} className="w-full h-2 bg-slate-100 rounded-full appearance-none cursor-pointer accent-[#ff6b35]" />
-                  <div className="bg-[#0d1b2a] p-10 rounded-2xl">
-                    <p className="text-[9px] font-black text-slate-500 uppercase mb-4 tracking-widest">Revenus mensuels estimés (12%/an)</p>
-                    <div className="text-5xl font-black text-white tracking-tighter">{formatCFA(simInvAmount * 0.12 / 12)}</div>
+                  <input type="range" min="100000" max="100000000" step="500000" value={simInvAmount} onChange={(e) => setSimInvAmount(parseInt(e.target.value))} className="w-full h-5 bg-slate-100 rounded-full appearance-none cursor-pointer accent-[#ff6b35]" />
+                  <div className="bg-[#0d1b2a] p-20 rounded-[4rem] shadow-2xl relative overflow-hidden">
+                    <p className="text-base font-black text-slate-500 uppercase mb-10 tracking-[0.5em] relative z-10">Rente Mensuelle Estimée (12% AN)</p>
+                    <div className="text-[6rem] font-black text-white tracking-tighter relative z-10 leading-none italic">{formatCFA(simInvAmount * 0.12 / 12)}</div>
+                    <div className="absolute bottom-0 right-0 w-80 h-80 bg-[#ff6b35]/15 rounded-full blur-[100px] -mr-32 -mb-32"></div>
                   </div>
                 </div>
             </div>
@@ -408,35 +430,38 @@ const App: React.FC = () => {
 
   return (
     <Layout userRole={userRole} activeTab={activeTab} setActiveTab={setActiveTab} onGoHome={() => setView('landing')}>
-      <div className="pb-40">
+      <div className="pb-64">
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-[50vh] gap-6">
-            <div className="w-12 h-12 border-8 border-[#ff6b35]/10 border-t-[#ff6b35] rounded-full animate-spin"></div>
-            <p className="text-[10px] font-black text-[#0d1b2a] uppercase tracking-widest animate-pulse">GESS INVEST...</p>
+          <div className="flex flex-col items-center justify-center h-[70vh] gap-12">
+            <div className="w-32 h-32 border-[16px] border-[#ff6b35]/10 border-t-[#ff6b35] rounded-full animate-spin shadow-2xl"></div>
+            <p className="text-2xl font-black text-[#0d1b2a] uppercase tracking-[0.6em] animate-pulse italic">Accès GESS INVEST...</p>
           </div>
         ) : getContent()}
       </div>
 
-      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-[#0d1b2a]/95 backdrop-blur-2xl p-2 rounded-2xl shadow-2xl border border-white/10 z-[5000] flex gap-1 scale-90">
+      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 bg-[#0d1b2a]/95 backdrop-blur-3xl p-4 rounded-[2.5rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.6)] border-2 border-white/10 z-[5000] flex gap-4 scale-150 transform-gpu">
         {[
           { id: 'investor', label: 'Investisseur' },
           { id: 'agency', label: 'Agence' },
           { id: 'developer', label: 'Promoteur' },
           { id: 'admin', label: 'Admin' }
         ].map((role) => (
-          <button key={role.id} onClick={() => { setUserRole(role.id as any); setActiveTab('overview'); setSelectedProject(null); }} className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${userRole === role.id ? 'bg-[#ff6b35] text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>{role.label}</button>
+          <button key={role.id} onClick={() => { setUserRole(role.id as any); setActiveTab('overview'); setSelectedProject(null); }} className={`px-12 py-5 rounded-[1.5rem] text-[12px] font-black uppercase tracking-[0.2em] transition-all ${userRole === role.id ? 'bg-[#ff6b35] text-white shadow-2xl scale-110' : 'text-slate-500 hover:text-white'}`}>{role.label}</button>
         ))}
       </div>
 
       {showBalanceModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[9999] flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-10 shadow-2xl border border-slate-100">
-            <h3 className="text-2xl font-black mb-8 tracking-tighter italic underline decoration-[#ff6b35] decoration-2">Solde</h3>
-            <div className="space-y-6">
-               <input type="number" value={balanceAdjustment} onChange={(e) => setBalanceAdjustment(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 p-6 rounded-2xl font-black text-3xl outline-none focus:border-[#ff6b35] text-center" placeholder="0" />
-               <div className="flex gap-4">
-                  <button onClick={() => setShowBalanceModal(null)} className="flex-1 text-slate-400 font-black text-[10px] uppercase underline">Annuler</button>
-                  <button onClick={handleUpdateBalance} className="flex-1 bg-[#ff6b35] text-white py-4 rounded-xl font-black text-[10px] uppercase shadow-lg">Confirmer</button>
+        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-3xl z-[9999] flex items-center justify-center p-16 animate-fade">
+          <div className="bg-white w-full max-w-xl rounded-[5rem] p-20 shadow-2xl border-4 border-slate-50 transform scale-125">
+            <h3 className="text-5xl font-black mb-14 tracking-tighter italic underline decoration-[#ff6b35] decoration-8 underline-offset-[16px] text-center uppercase italic">Ajuster Trésorerie</h3>
+            <div className="space-y-16">
+               <div className="space-y-8">
+                  <label className="text-base font-black text-slate-400 uppercase tracking-[0.5em] block text-center">Valeur de l'ajustement</label>
+                  <input type="number" value={balanceAdjustment} onChange={(e) => setBalanceAdjustment(Number(e.target.value))} className="w-full bg-slate-50 border-4 border-slate-200 p-12 rounded-[3rem] font-black text-6xl outline-none focus:border-[#ff6b35] text-center shadow-inner italic" placeholder="0" />
+               </div>
+               <div className="flex gap-10">
+                  <button onClick={() => setShowBalanceModal(null)} className="flex-1 text-slate-400 font-black text-base uppercase underline tracking-[0.4em] hover:text-slate-600 transition-colors italic">Fermer</button>
+                  <button onClick={handleUpdateBalance} className="flex-1 bg-[#ff6b35] text-white py-8 rounded-[1.5rem] font-black text-base uppercase tracking-[0.3em] shadow-2xl hover:scale-110 transition-all">Valider</button>
                </div>
             </div>
           </div>
@@ -444,28 +469,32 @@ const App: React.FC = () => {
       )}
 
       {showAddProjectModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[9999] flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-xl rounded-3xl p-10 shadow-2xl overflow-y-auto max-h-[85vh]">
-            <h3 className="text-3xl font-black mb-10 tracking-tighter italic underline decoration-[#ff6b35] decoration-2">Nouveau Projet</h3>
-            <div className="space-y-6 mb-10 text-left">
-               <div>
-                  <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block">Titre</label>
-                  <input type="text" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold focus:border-[#ff6b35] outline-none" placeholder="Ex: Cité Indigo" />
+        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-3xl z-[9999] flex items-center justify-center p-16 animate-fade">
+          <div className="bg-white w-full max-w-4xl rounded-[5rem] p-20 shadow-2xl overflow-y-auto max-h-[94vh] border-4 border-slate-50">
+            <h3 className="text-6xl font-black mb-16 tracking-tighter italic underline decoration-[#ff6b35] decoration-8 underline-offset-[20px] uppercase italic">Nouvel Actif Immo</h3>
+            <div className="space-y-12 mb-16 text-left">
+               <div className="space-y-6">
+                  <label className="text-base font-black text-slate-400 uppercase mb-3 block tracking-[0.4em]">Désignation commerciale</label>
+                  <input type="text" className="w-full bg-slate-50 border-4 border-slate-100 p-8 rounded-[2rem] font-black text-2xl focus:border-[#ff6b35] outline-none shadow-inner italic" placeholder="Ex: Résidence GESS Sabangali" />
                </div>
-               <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block">Levée (F CFA)</label>
-                    <input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-black focus:border-[#ff6b35] outline-none" placeholder="50.000.000" />
+               <div className="grid grid-cols-2 gap-12">
+                  <div className="space-y-6">
+                    <label className="text-base font-black text-slate-400 uppercase mb-3 block tracking-[0.4em]">Objectif Levée (F CFA)</label>
+                    <input type="number" className="w-full bg-slate-50 border-4 border-slate-100 p-8 rounded-[2rem] font-black text-3xl focus:border-[#ff6b35] outline-none shadow-inner italic" placeholder="50.000.000" />
                   </div>
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block">ROI cible %</label>
-                    <input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-black focus:border-[#ff6b35] outline-none" placeholder="12" />
+                  <div className="space-y-6">
+                    <label className="text-base font-black text-slate-400 uppercase mb-3 block tracking-[0.4em]">ROI Cible % / An</label>
+                    <input type="number" className="w-full bg-slate-50 border-4 border-slate-100 p-8 rounded-[2rem] font-black text-3xl focus:border-[#ff6b35] outline-none shadow-inner italic" placeholder="12" />
                   </div>
+               </div>
+               <div className="space-y-6">
+                  <label className="text-base font-black text-slate-400 uppercase mb-3 block tracking-[0.4em]">Note descriptive</label>
+                  <textarea className="w-full bg-slate-50 border-4 border-slate-100 p-8 rounded-[2rem] font-bold text-xl focus:border-[#ff6b35] outline-none shadow-inner h-48 italic" placeholder="Détaillez les points forts de l'opération..."></textarea>
                </div>
             </div>
-            <div className="flex gap-6">
-              <button onClick={() => setShowAddProjectModal(false)} className="flex-1 text-slate-400 font-black text-[10px] uppercase underline">Fermer</button>
-              <button className="flex-1 bg-[#0d1b2a] text-white py-5 rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-[#ff6b35]">Soumettre</button>
+            <div className="flex gap-12">
+              <button onClick={() => setShowAddProjectModal(false)} className="flex-1 text-slate-400 font-black text-base uppercase underline tracking-[0.4em] hover:text-slate-600 transition-colors italic">Annuler</button>
+              <button className="flex-1 bg-[#0d1b2a] text-white py-10 rounded-[2rem] font-black text-lg uppercase tracking-[0.3em] shadow-2xl hover:bg-[#ff6b35] transition-all scale-105 italic">Lancer le Financement</button>
             </div>
           </div>
         </div>
